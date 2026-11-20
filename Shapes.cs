@@ -71,7 +71,7 @@ public static class ShapeScripts
     };
 
     /// <summary>Builds the bpy script from the templates. Returns an error as text if any argument is invalid.</summary>
-    public static (string? Script, string? Error) Build(Shape shape, JsonElement args)
+    public static (string? Script, string? Error) Build(Shape shape, JsonElement args, string? beforeFooter = null)
     {
         var inv = CultureInfo.InvariantCulture;
 
@@ -126,6 +126,7 @@ public static class ShapeScripts
             var matT = Templates.Resolve("material", null, MaterialAllowed, "@NAME@", "@COLOR@").Text;
             sb.Append(Templates.Fill(matT, matValues)).Append('\n');
         }
+        if (beforeFooter is not null) sb.Append(beforeFooter).Append('\n');   // extra statements (e.g. create_box scales the new object)
         var footT = Templates.Resolve("footer", null, FooterAllowed).Text;
         sb.Append(Templates.Fill(footT, new Dictionary<string, string> { ["NAME"] = name })).Append('\n');
 

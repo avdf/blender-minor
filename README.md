@@ -42,6 +42,16 @@ as `roxa`) or `#RRGGBB`.
 | `list_objects` | none | lists the scene as short text: `name TYPE (x, y, z)` |
 | `move_object` | `name` (required), `x`, `y`, `z`, `relative` | moves an existing object by name; axes you omit stay put |
 | `bevel_object` | `name` (required), `width`, `segments` | adds/updates a Bevel modifier on an existing mesh |
+| `create_box` | `width`, `depth`, `height`, `x`, `y`, `z`, `color`, `name` | a box with exact sizes (x, y, z = its center) |
+| `set_dimensions` | `name` (required), `x`, `y`, `z` | sets the exact size of an existing object |
+| `boolean_op` | `target`, `cutter` (required), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT of two objects; **transactional** (see below) |
+| `drill_hole` | `name`, `diameter` (required), `x`, `y`, `z`, `axis`, `depth`, `clearance`, `segments` | a round hole of an exact diameter, through or blind, along X, Y or Z |
+| `check_mesh` | `name` (required) | closed (manifold) or not, volume and dimensions |
+
+**Booleans are transactional.** Triangle-mesh booleans fail on dirty meshes. `boolean_op` and `drill_hole` keep a copy of the
+mesh, apply the operation (Exact solver), check that the result is a closed mesh with a volume, and **put the old mesh back with a
+clear error** if it is not. `drill_hole` cuts with a cylinder that sticks out of the part on both sides (no coplanar faces); the hole is
+a 64-sided polygon inscribed in the circle (a 3 mm hole is 2.996 mm across the flats), and `clearance` adds to the diameter for 3D printing.
 
 Design rules (the point of the project):
 
@@ -129,6 +139,19 @@ dotnet BlenderMinor.dll --selftest         # runs every tool in an ISOLATED head
 curl http://127.0.0.1:9192/templates       # where each text comes from (file or embedded)
 ```
 
+## Testing
+
+Three levels, from fast to slow:
+
+```bash
+dotnet BlenderMinor.dll --selftest      # every tool in an isolated headless Blender (no window)
+python3 -I eval/test_tools.py           # integration test against a LIVE blender-minor + Blender, no model, ~20 s
+python3 -I eval/evaluate_model.py ...   # how well a given model uses the tools (below)
+```
+
+`eval/test_tools.py` checks exact sizes, the volume removed by holes (against pi r^2 h), union/intersection/difference volumes, the
+rollback of a broken boolean, error messages and name-injection attempts. It creates only `BMT_*` objects and removes them.
+
 ## Evaluation
 
 [`eval/evaluate_model.py`](eval/evaluate_model.py) sends 12 requests to a `llama-server`, lets the model call the tools,
@@ -162,9 +185,9 @@ python3 -I eval/evaluate_model.py --label my-model --system prompts/system.en.tx
 
 Aimed at modeling parts for 3D printing by conversation, with exact sizes and holes in the right places:
 
-- [ ] `create_box(width, depth, height, ...)` and `set_dimensions(name, x, y, z)`
-- [ ] `boolean_op(target, tool, UNION | DIFFERENCE | INTERSECT)` and `drill_hole(name, diameter, depth, x, y, z, axis)`
-- [ ] `check_mesh(name)`: manifold check, volume, dimensions
+- [x] `create_box`, `set_dimensions`, `boolean_op` (transactional), `drill_hole` (through/blind, clearance), `check_mesh`
+- [ ] `drill_hole`: counterbore and countersink, and a `screw_hole` with standard sizes (M3 clearance, head recess, heat-set insert)
+- [ ] `repair_mesh(name)`: merge by distance, fix normals, fill holes, remove loose parts (report before/after)
 - [ ] `export_stl(name, path)` and millimeter units
 - [ ] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
 

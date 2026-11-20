@@ -16,11 +16,20 @@ public static class SelfTest
         """{"color":"blue","specular":0.7,"roughness":0.3,"x":1,"y":2,"z":3,"name":"SelfTest"}""",
     ];
 
-    // Editing tools act on an object created first, named SelfTestCube. Each case must print "OK ...".
-    private static readonly Dictionary<string, string[]> OpCases = new()
+    // Tools that work on objects act on a cube created first, named SelfTestCube (size 2, centered at the origin).
+    // Setup = extra cubes created before the cases (e.g. a cutter). MissingJson = a call naming an object that does not
+    // exist, which must answer with a clear "ERROR: object not found" and never a traceback (null = not applicable).
+    private sealed record OpPlan(string[] Cases, string[] Setup, string? MissingJson);
+
+    private static readonly Dictionary<string, OpPlan> OpPlans = new()
     {
-        ["move_object"] = ["""{"name":"SelfTestCube","x":5,"y":1}""", """{"name":"SelfTestCube","z":2,"relative":true}"""],
-        ["bevel_object"] = ["""{"name":"SelfTestCube","width":0.1,"segments":2}""", """{"name":"SelfTestCube","width":0.05}"""],
+        ["create_box"] = new(["""{"name":"SelfTestBox","width":4,"depth":2,"height":1,"x":10,"color":"blue"}"""], [], null),
+        ["set_dimensions"] = new(["""{"name":"SelfTestCube","x":3,"z":1.5}"""], [], """{"name":"DoesNotExist","x":1}"""),
+        ["move_object"] = new(["""{"name":"SelfTestCube","x":5,"y":1}""", """{"name":"SelfTestCube","z":2,"relative":true}"""], [], """{"name":"DoesNotExist","x":1}"""),
+        ["bevel_object"] = new(["""{"name":"SelfTestCube","width":0.1,"segments":2}""", """{"name":"SelfTestCube","width":0.05}"""], [], """{"name":"DoesNotExist","width":0.1}"""),
+        ["check_mesh"] = new(["""{"name":"SelfTestCube"}"""], [], """{"name":"DoesNotExist"}"""),
+        ["boolean_op"] = new(["""{"target":"SelfTestCube","cutter":"SelfTestCutter","operation":"DIFFERENCE"}"""], ["""{"name":"SelfTestCutter","size":1,"x":1}"""], """{"target":"DoesNotExist","cutter":"SelfTestCube"}"""),
+        ["drill_hole"] = new(["""{"name":"SelfTestCube","diameter":0.5,"x":0.3,"y":0.2}""", """{"name":"SelfTestCube","diameter":0.3,"x":-0.5,"y":-0.5,"z":1,"depth":0.4}"""], [], """{"name":"DoesNotExist","diameter":1,"x":0,"y":0}"""),
     };
 
     public static async Task<int> RunAsync()
@@ -107,25 +116,35 @@ public static class SelfTest
 
             foreach (var op in OpScripts.Ops)
             {
+                var plan = OpPlans[op.Tool];
                 var script = new System.Text.StringBuilder(prelude);
                 int expectedOk = 1;
                 string? opError = null;
-                foreach (var c in OpCases[op.Tool])
+                foreach (var sj in plan.Setup)
+                {
+                    using var sd = JsonDocument.Parse(sj);
+                    var (ss, se) = ShapeScripts.Build(ShapeScripts.Find("create_cube")!, sd.RootElement);
+                    if (se is not null) { opError = se; break; }
+                    script.Append(ss).Append('\n');
+                    expectedOk++;
+                }
+                foreach (var c in plan.Cases)
                 {
                     using var doc = JsonDocument.Parse(c);
                     var (s, err) = OpScripts.Build(op, doc.RootElement);
-                    if (err is not null) { opError = err; break; }
+                    if (err is not null) { opError ??= err; break; }
                     script.Append(s).Append('\n');
                     expectedOk++;
                 }
                 // an object that does not exist must get a clear error message, not a traceback
-                using (var missing = JsonDocument.Parse("""{"name":"DoesNotExist","x":1,"width":0.1}"""))
+                if (plan.MissingJson is not null)
                 {
+                    using var missing = JsonDocument.Parse(plan.MissingJson);
                     var (s, err) = OpScripts.Build(op, missing.RootElement);
                     if (err is not null) opError ??= err; else script.Append(s).Append('\n');
                 }
                 if (opError is not null) { failed++; Console.WriteLine($"FAILED  {op.Tool}: {opError}"); continue; }
-                await RunCaseAsync(op.Tool, script.ToString(), expectedOk, "ERROR: object not found: DoesNotExist");
+                await RunCaseAsync(op.Tool, script.ToString(), expectedOk, plan.MissingJson is null ? null : "ERROR: object not found: DoesNotExist");
             }
         }
         finally { try { tmp.Delete(true); } catch (IOException) { } }

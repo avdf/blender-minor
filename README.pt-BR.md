@@ -42,6 +42,17 @@ feminino, como `roxa`) ou `#RRGGBB`.
 | `list_objects` | nenhum | lista a cena em texto curto: `nome TIPO (x, y, z)` |
 | `move_object` | `name` (obrigatório), `x`, `y`, `z`, `relative` | move um objeto existente pelo nome; eixos omitidos ficam parados |
 | `bevel_object` | `name` (obrigatório), `width`, `segments` | adiciona/atualiza um modificador Bevel num objeto existente |
+| `create_box` | `width`, `depth`, `height`, `x`, `y`, `z`, `color`, `name` | uma caixa com medidas exatas (x, y, z = o centro dela) |
+| `set_dimensions` | `name` (obrigatório), `x`, `y`, `z` | define o tamanho exato de um objeto existente |
+| `boolean_op` | `target`, `cutter` (obrigatórios), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT de dois objetos; **transacional** (veja abaixo) |
+| `drill_hole` | `name`, `diameter` (obrigatórios), `x`, `y`, `z`, `axis`, `depth`, `clearance`, `segments` | furo redondo de diâmetro exato, passante ou cego, nos eixos X, Y ou Z |
+| `check_mesh` | `name` (obrigatório) | malha fechada (manifold) ou não, volume e dimensões |
+
+**As operações booleanas são transacionais.** Booleanas em malha de triângulos falham em malhas sujas. O `boolean_op` e o
+`drill_hole` guardam uma cópia da malha, aplicam a operação (solver Exact), conferem se o resultado é uma malha fechada com
+volume e, se não for, **devolvem a malha antiga com um erro claro**. O `drill_hole` corta com um cilindro que passa dos dois lados
+da peça (sem faces coplanares); o furo é um polígono de 64 lados inscrito no círculo (um furo de 3 mm mede 2,996 mm entre as
+faces planas), e o `clearance` soma ao diâmetro para impressão 3D.
 
 Regras de desenho (o objetivo do projeto):
 
@@ -106,6 +117,20 @@ dotnet BlenderMinor.dll --selftest         # roda todas as ferramentas num Blend
 curl http://127.0.0.1:9192/templates       # de onde vem cada texto (arquivo ou embutido)
 ```
 
+## Testes
+
+Três níveis, do mais rápido ao mais lento:
+
+```bash
+dotnet BlenderMinor.dll --selftest      # todas as ferramentas num Blender headless isolado (sem janela)
+python3 -I eval/test_tools.py           # teste de integração contra um blender-minor e um Blender AO VIVO, sem modelo, ~20 s
+python3 -I eval/evaluate_model.py ...   # quão bem um modelo usa as ferramentas (abaixo)
+```
+
+O `eval/test_tools.py` confere medidas exatas, o volume removido pelos furos (contra pi r^2 h), os volumes de união/interseção/
+diferença, o desfazer de uma booleana quebrada, as mensagens de erro e tentativas de injeção pelo nome. Ele cria só objetos
+`BMT_*` e remove todos.
+
 ## Avaliação
 
 [`eval/evaluate_model.py`](eval/evaluate_model.py) manda 12 pedidos a um `llama-server`, deixa o modelo chamar as
@@ -139,9 +164,9 @@ python3 -I eval/evaluate_model.py --label meu-modelo --system prompts/system.en.
 
 Com o objetivo de modelar peças para impressão 3D por conversa, com medidas exatas e furos nos lugares certos:
 
-- [ ] `create_box(width, depth, height, ...)` e `set_dimensions(name, x, y, z)`
-- [ ] `boolean_op(target, tool, UNION | DIFFERENCE | INTERSECT)` e `drill_hole(name, diameter, depth, x, y, z, axis)`
-- [ ] `check_mesh(name)`: malha fechada, volume, dimensões
+- [x] `create_box`, `set_dimensions`, `boolean_op` (transacional), `drill_hole` (passante/cego, folga), `check_mesh`
+- [ ] `drill_hole`: rebaixo e escareado, e um `screw_hole` com medidas padrão (M3 passante, rebaixo da cabeça, inserto de rosca a quente)
+- [ ] `repair_mesh(name)`: juntar vértices, corrigir normais, tapar buracos, remover pedaços soltos (com antes/depois)
 - [ ] `export_stl(name, path)` e unidades em milímetros
 - [ ] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
 

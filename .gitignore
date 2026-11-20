@@ -1,0 +1,8 @@
+bin/
+obj/
+publish*/
+*.bak*
+eval/results/
+.vs/
+.idea/
+*.user

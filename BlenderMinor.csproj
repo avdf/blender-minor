@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>BlenderMinor</AssemblyName>
+    <RootNamespace>BlenderMinor</RootNamespace>
+    <Description>BMLS: Blender Minor LLM Shortcuts. MCP em .NET com uma ferramenta por forma, para modelos pequenos.</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

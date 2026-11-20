@@ -1,0 +1,25 @@
+# Example systemd unit for blender-minor. Copy, edit the two paths and the User, then:
+#   sudo cp blender-minor.service.example /etc/systemd/system/blender-minor.service
+#   sudo systemctl daemon-reload && sudo systemctl start blender-minor
+# Build the binary first:  dotnet publish -c Release -o publish
+#
+# SECURITY: the API has NO authentication. By default it listens on 127.0.0.1 only.
+# Only set BLENDER_MINOR_HOST=0.0.0.0 on a network you trust: anyone who can reach the port can create objects in your Blender.
+[Unit]
+Description=blender-minor: MCP shortcuts for Blender, made for small models
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/path/to/blender-minor/publish
+Environment=BLENDER_MINOR_PORT=9192
+Environment=BLENDER_MCP_URL=http://127.0.0.1:9191/
+# Environment=BLENDER_MINOR_HOST=127.0.0.1
+ExecStart=/usr/bin/dotnet /path/to/blender-minor/publish/BlenderMinor.dll
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

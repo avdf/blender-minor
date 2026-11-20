@@ -39,13 +39,21 @@ feminino, como `roxa`) ou `#RRGGBB`.
 | `create_cylinder` | `radius`, `height`, ... | cria um cilindro |
 | `create_cone` | `radius`, `height`, ... | cria um cone |
 | `create_torus` | `major_radius`, `minor_radius`, ... | cria um toro |
+| `create_plane` | `size`, ... | cria um plano quadrado |
+| `create_icosphere` | `radius`, `subdivisions`, ... | cria uma icosfera (esfera de triângulos) |
 | `list_objects` | nenhum | lista a cena em texto curto: `nome TIPO (x, y, z)` |
 | `move_object` | `name` (obrigatório), `x`, `y`, `z`, `relative` | move um objeto existente pelo nome; eixos omitidos ficam parados |
 | `bevel_object` | `name` (obrigatório), `width`, `segments` | adiciona/atualiza um modificador Bevel num objeto existente |
 | `create_box` | `width`, `depth`, `height`, `x`, `y`, `z`, `color`, `name` | uma caixa com medidas exatas (x, y, z = o centro dela) |
 | `set_dimensions` | `name` (obrigatório), `x`, `y`, `z` | define o tamanho exato de um objeto existente |
 | `boolean_op` | `target`, `cutter` (obrigatórios), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT de dois objetos; **transacional** (veja abaixo) |
-| `drill_hole` | `name`, `diameter` (obrigatórios), `x`, `y`, `z`, `axis`, `depth`, `clearance`, `segments` | furo redondo de diâmetro exato, passante ou cego, nos eixos X, Y ou Z |
+| `drill_hole` | `name`, `diameter` (obrigatórios), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | furo redondo de diâmetro exato, passante ou cego, nos eixos X, Y ou Z, com **rebaixo** opcional (para a cabeça do parafuso) ou **escareado** de 90° |
+| `screw_hole` | `name` (obrigatório), `size` (M2 a M8), `kind`, `x`, `y`, `z`, `axis`, `side`, `depth` | furo para um parafuso padrão, de uma tabela: `clearance` (passante), `counterbore` (rebaixo), `countersunk` (escareado) ou `insert` (furo cego para inserto de rosca a quente) |
+| `set_color` | `name`, `color` (obrigatórios), `roughness`, `specular` | troca o material de um objeto existente |
+| `repair_mesh` | `name` (obrigatório), `tolerance` | junta vértices duplicados, remove pedaços soltos, corrige normais, tapa buracos; mostra antes/depois; desfaz se piorar |
+| `delete_object` | `name` (obrigatório) | apaga um objeto pelo nome |
+| `export_stl` | `name` (obrigatório), `filename` | exporta um STL binário para o fatiador, **só um nome de arquivo** numa pasta de exportação fixa |
+| `set_units` | `unit` (`mm`, `cm`, `m`) | ajusta a cena para 1 unidade do Blender = 1 mm (ou cm, m) |
 | `check_mesh` | `name` (obrigatório) | malha fechada (manifold) ou não, volume e dimensões |
 
 **As operações booleanas são transacionais.** Booleanas em malha de triângulos falham em malhas sujas. O `boolean_op` e o
@@ -53,6 +61,12 @@ feminino, como `roxa`) ou `#RRGGBB`.
 volume e, se não for, **devolvem a malha antiga com um erro claro**. O `drill_hole` corta com um cilindro que passa dos dois lados
 da peça (sem faces coplanares); o furo é um polígono de 64 lados inscrito no círculo (um furo de 3 mm mede 2,996 mm entre as
 faces planas), e o `clearance` soma ao diâmetro para impressão 3D.
+
+**Tabela de parafusos.** O `screw_hole` usa valores típicos (folga ISO 273 média, rebaixo de cabeça cilíndrica ISO 4762, cabeça
+chata ISO 10642, insertos de latão de rosca a quente comuns; para o M3: passante 3,4, rebaixo 6,0 x 3,0, inserto 4,0 x 5,7).
+São um **ponto de partida**: confira com os seus parafusos, insertos e impressora. Qualquer campo pode ser sobrescrito, sem
+recompilar, em `~/.config/blender-minor/screws.json` (ou `BLENDER_MINOR_SCREWS`), por exemplo
+`{"M3": {"clearance": 3.5, "insert_diameter": 4.2}}`.
 
 Regras de desenho (o objetivo do projeto):
 
@@ -157,6 +171,9 @@ python3 -I eval/evaluate_model.py --label meu-modelo --system prompts/system.en.
 - A API **não tem autenticação**. Por padrão escuta só em `127.0.0.1`. `BLENDER_MINOR_HOST=0.0.0.0` deixa qualquer um que
   alcance a porta criar objetos no seu Blender; só faça isso numa rede em que você confia.
 - O modelo nunca manda código. Só preenche campos validados de templates fixos.
+- O `export_stl` nunca aceita um caminho: só um nome de arquivo, gravado em `~/blender-minor-exports` (ou `BLENDER_MINOR_EXPORT_DIR`).
+  É de propósito: um caminho livre deixaria o modelo gravar em qualquer lugar do disco.
+- O `delete_object` é destrutivo. Se o seu cliente MCP deixa escolher quais ferramentas um modelo pode chamar, deixe-o de fora para modelos pequenos.
 - O servidor MCP do Blender por trás pode expor execução de Python arbitrário (`execute_blender_code`). **Não dê essa
   ferramenta ao modelo**; dê a ele só o `blender-minor`.
 
@@ -165,10 +182,11 @@ python3 -I eval/evaluate_model.py --label meu-modelo --system prompts/system.en.
 Com o objetivo de modelar peças para impressão 3D por conversa, com medidas exatas e furos nos lugares certos:
 
 - [x] `create_box`, `set_dimensions`, `boolean_op` (transacional), `drill_hole` (passante/cego, folga), `check_mesh`
-- [ ] `drill_hole`: rebaixo e escareado, e um `screw_hole` com medidas padrão (M3 passante, rebaixo da cabeça, inserto de rosca a quente)
-- [ ] `repair_mesh(name)`: juntar vértices, corrigir normais, tapar buracos, remover pedaços soltos (com antes/depois)
-- [ ] `export_stl(name, path)` e unidades em milímetros
-- [ ] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
+- [x] rebaixo e escareado no `drill_hole`, e o `screw_hole` com tabela de medidas padrão
+- [x] `repair_mesh`, `export_stl` (só nome de arquivo, pasta de exportação fixa), `set_units`
+- [x] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
+- [ ] filetes (`bevel_object` em arestas escolhidas), rasgos e bolsões retangulares, padrões de furos
+- [ ] opção de furo roscado e profundidade do inserto configurável por material
 
 Ideias e pull requests são bem-vindos.
 

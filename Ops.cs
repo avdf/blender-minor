@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace BlenderMinor;
 
@@ -21,6 +22,13 @@ public static class OpScripts
     private static readonly OpProp Y = new("y", "number", "Y position");
     private static readonly OpProp Z = new("z", "number", "Z position");
 
+    private static readonly OpProp[] HolePlacement =
+    [
+        X, Y, Z,
+        new("axis", "string", "X, Y or Z (default Z)"),
+        new("side", "string", "+ (default) or -: which side of the axis the hole starts on (the top for Z)"),
+    ];
+
     public static readonly Op[] Ops =
     [
         new("create_box",
@@ -32,6 +40,10 @@ public static class OpScripts
             "Set the exact size of an existing object by name. x, y, z are the new sizes along each axis; axes you leave out keep their size.",
             [NameProp, new("x", "number", "new size along X"), new("y", "number", "new size along Y"), new("z", "number", "new size along Z")],
             ["name"]),
+        new("set_color",
+            "Change the color of an existing object by name (replaces its material).",
+            [NameProp, new("color", "string", "name (red, blue...) or #RRGGBB"), new("roughness", "number", "0 to 1"), new("specular", "number", "0 to 1")],
+            ["name", "color"]),
         new("move_object",
             "Move an existing object by name. x, y, z are the new position; axes you leave out stay where they are. With relative=true they are offsets from the current position.",
             [NameProp,
@@ -52,15 +64,43 @@ public static class OpScripts
              new("operation", "string", "UNION, DIFFERENCE or INTERSECT (default DIFFERENCE)"), new("delete_cutter", "boolean", "remove the cutter afterwards, default true")],
             ["target", "cutter"]),
         new("drill_hole",
-            "Drill a round hole of an exact diameter in an existing object by name, along the X, Y or Z axis. Without depth the hole goes all the way through. With depth it is a blind hole that starts at the entry point and goes toward the negative axis direction (down for Z).",
-            [NameProp, new("diameter", "number", "hole diameter"), X, Y, Z,
-             new("axis", "string", "X, Y or Z (default Z)"), new("depth", "number", "omit for a through hole"),
-             new("clearance", "number", "extra diameter for 3D printing, default 0"), new("segments", "number", "sides of the hole, 8 to 256, default 64")],
+            "Drill a round hole of an exact diameter in an existing object by name, along the X, Y or Z axis. Without depth the hole goes all the way through. With depth it is a blind hole that starts at the entry point (x, y, z) and goes into the part. Optional counterbore (a wider recess for a screw head) or countersink (a cone for a flat head).",
+            new OpProp[] { NameProp, new("diameter", "number", "hole diameter") }
+                .Concat(HolePlacement)
+                .Concat([new OpProp("depth", "number", "omit for a through hole"),
+                         new OpProp("clearance", "number", "extra diameter for 3D printing, default 0"),
+                         new OpProp("counterbore_diameter", "number", "recess diameter at the entry"),
+                         new OpProp("counterbore_depth", "number", "recess depth"),
+                         new OpProp("countersink_diameter", "number", "countersink diameter at the entry (90 degree cone)"),
+                         new OpProp("segments", "number", "sides of the hole, 8 to 256, default 64")]).ToArray(),
             ["name", "diameter"]),
+        new("screw_hole",
+            "Drill a hole for a standard screw size by name, using a table of typical dimensions. kind: clearance (screw passes through), counterbore (plus a recess for a socket head), countersunk (plus a cone for a flat head) or insert (blind hole for a heat-set insert; needs the entry point z along the axis).",
+            new OpProp[] { NameProp, new("size", "string", "M2, M2.5, M3, M4, M5, M6 or M8 (default M3)"),
+                           new("kind", "string", "clearance (default), counterbore, countersunk or insert") }
+                .Concat(HolePlacement)
+                .Concat([new OpProp("depth", "number", "optional: makes a clearance hole blind")]).ToArray(),
+            ["name"]),
         new("check_mesh",
             "Check an existing object: is the mesh closed (manifold, printable), its volume and its dimensions.",
             [NameProp],
             ["name"]),
+        new("repair_mesh",
+            "Repair an existing mesh so slicers accept it: merge duplicate vertices, remove loose parts, fix normals, fill holes. Reports before and after; leaves the object unchanged if the repair makes it worse.",
+            [NameProp, new("tolerance", "number", "merge distance, default 0.0001")],
+            ["name"]),
+        new("delete_object",
+            "Delete one existing object by name.",
+            [NameProp],
+            ["name"]),
+        new("export_stl",
+            "Export an existing object as a binary STL file for a slicer. Only a file name is accepted; the file is written to the export folder.",
+            [NameProp, new("filename", "string", "file name, e.g. bracket.stl (default: the object name)")],
+            ["name"]),
+        new("set_units",
+            "Set the scene units so that one Blender unit equals the chosen unit. Use mm for 3D printing.",
+            [new("unit", "string", "mm, cm or m (default mm)")],
+            []),
     ];
 
     public static Op? Find(string tool) => Ops.FirstOrDefault(o => o.Tool == tool);
@@ -79,11 +119,17 @@ public static class OpScripts
     {
         "create_box" => BuildBox(args),
         "set_dimensions" => WithObject(args, "name", (lit, a) => BuildSetDimensions(lit, a)),
+        "set_color" => WithObject(args, "name", (lit, a) => BuildSetColor(lit, a)),
         "move_object" => WithObject(args, "name", (lit, a) => BuildMove(lit, a)),
         "bevel_object" => WithObject(args, "name", (lit, a) => BuildBevel(lit, a)),
         "check_mesh" => WithObject(args, "name", (lit, a) => BuildCheck(lit)),
-        "drill_hole" => WithObject(args, "name", (lit, a) => BuildDrill(lit, a)),
+        "repair_mesh" => WithObject(args, "name", (lit, a) => BuildRepair(lit, a)),
+        "delete_object" => WithObject(args, "name", (lit, a) => BuildDelete(lit)),
+        "export_stl" => WithObject(args, "name", (lit, a) => BuildExport(lit, a)),
+        "drill_hole" => WithObject(args, "name", (lit, a) => BuildDrill(lit, a, null)),
+        "screw_hole" => WithObject(args, "name", (lit, a) => BuildScrewHole(lit, a)),
         "boolean_op" => BuildBoolean(args),
+        "set_units" => BuildUnits(args),
         _ => (null, $"Unknown tool '{op.Tool}'."),
     };
 
@@ -111,6 +157,16 @@ public static class OpScripts
         $"{indent}print(\"ERROR: object not found: \" + {lit} + \". Objects: \" + \", \".join(x.name for x in bpy.context.scene.objects))";
 
     private static string N(double v) => v.ToString("R", CultureInfo.InvariantCulture);
+
+    private static (bool Value, string? Error) ReadBool(JsonElement args, string key, bool def)
+    {
+        if (!ShapeScripts.Has(args, key)) return (def, null);
+        var el = args.GetProperty(key);
+        if (el.ValueKind == JsonValueKind.True) return (true, null);
+        if (el.ValueKind == JsonValueKind.False) return (false, null);
+        if (el.ValueKind == JsonValueKind.String && bool.TryParse(el.GetString(), out var b)) return (b, null);
+        return (def, $"Argument '{key}' must be true or false.");
+    }
 
     /// <summary>Python helpers shared by the scripts that change or inspect a mesh. The boolean is TRANSACTIONAL: it keeps a copy
     /// of the mesh, applies the modifier, checks the result (closed mesh, volume) and puts the old mesh back if it came out broken.</summary>
@@ -197,17 +253,42 @@ public static class OpScripts
         return (sb.ToString(), null);
     }
 
+    private static (string? Script, string? Error) BuildSetColor(string lit, JsonElement args)
+    {
+        string? colorText = ShapeScripts.Text(args, "color");
+        if (string.IsNullOrWhiteSpace(colorText)) return (null, "Argument 'color' is required.");
+        var rgb = ShapeScripts.ParseColor(colorText);
+        if (rgb is null) return (null, $"Invalid color '{colorText}'. Use one of: {ShapeScripts.ColorHelp}.");
+        var (rough, er) = ShapeScripts.Number(args, "roughness", 0.5, 0, 1); if (er is not null) return (null, er);
+        var (spec, es) = ShapeScripts.Number(args, "specular", 0.5, 0, 1); if (es is not null) return (null, es);
+        string matName = ShapeScripts.CleanName(ShapeScripts.Text(args, "name"), "Object");
+        var values = new Dictionary<string, string>
+        {
+            ["NAME"] = matName,
+            ["COLOR"] = $"({ShapeScripts.F(rgb.Value.R)}, {ShapeScripts.F(rgb.Value.G)}, {ShapeScripts.F(rgb.Value.B)}, 1)",
+            ["ROUGHNESS"] = ShapeScripts.F(rough),
+            ["SPECULAR"] = ShapeScripts.F(spec),
+        };
+        // the same material template the shapes use (so an override file applies here too), indented into the else block
+        string block = Templates.Fill(Templates.Resolve("material", null, ShapeScripts.MaterialAllowed, "@NAME@", "@COLOR@").Text, values);
+        var sb = new StringBuilder();
+        sb.Append("import bpy\n");
+        sb.Append($"o = bpy.data.objects.get({lit})\n");
+        sb.Append("if o is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("elif o.type != 'MESH':\n");
+        sb.Append("    print(\"ERROR: \" + o.name + \" is \" + o.type + \"; set_color needs a MESH object\")\n");
+        sb.Append("else:\n");
+        sb.Append("    o.data.materials.clear()\n");
+        foreach (var line in block.Split('\n')) if (line.Length > 0) sb.Append("    ").Append(line).Append('\n');
+        sb.Append("    print(\"OK \" + o.name + \" color set\")");
+        string script = sb.ToString();
+        return Templates.Leftover(script) is { } left ? (null, $"Template error: marker {left} has no value.") : (script, null);
+    }
+
     private static (string? Script, string? Error) BuildMove(string lit, JsonElement args)
     {
-        bool relative = false;
-        if (ShapeScripts.Has(args, "relative"))
-        {
-            var el = args.GetProperty("relative");
-            if (el.ValueKind == JsonValueKind.True) relative = true;
-            else if (el.ValueKind == JsonValueKind.False) relative = false;
-            else if (el.ValueKind == JsonValueKind.String && bool.TryParse(el.GetString(), out var b)) relative = b;
-            else return (null, "Argument 'relative' must be true or false.");
-        }
+        var (relative, rerr) = ReadBool(args, "relative", false);
+        if (rerr is not null) return (null, rerr);
         string[] axes = ["x", "y", "z"];
         var parts = new string[3];
         int given = 0;
@@ -267,6 +348,111 @@ public static class OpScripts
         return (sb.ToString(), null);
     }
 
+    private static (string? Script, string? Error) BuildRepair(string lit, JsonElement args)
+    {
+        var (tol, et) = ShapeScripts.Number(args, "tolerance", 0.0001, 0, 1); if (et is not null) return (null, et);
+        var sb = new StringBuilder(PyHelpers).Append('\n');
+        sb.Append($"t = bpy.data.objects.get({lit})\n");
+        sb.Append("if t is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("elif t.type != 'MESH':\n");
+        sb.Append("    print(\"ERROR: \" + t.name + \" is \" + t.type + \"; repair_mesh needs a MESH object\")\n");
+        sb.Append("else:\n");
+        sb.Append("    bad0, vol0, n0 = bm_check(t)\n");
+        sb.Append("    old = t.data.copy()\n");
+        sb.Append("    bm = bmesh.new()\n");
+        sb.Append("    bm.from_mesh(t.data)\n");
+        sb.Append($"    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist={N(tol)})\n");
+        sb.Append("    loose = [e for e in bm.edges if not e.link_faces]\n");
+        sb.Append("    if loose: bmesh.ops.delete(bm, geom=loose, context='EDGES')\n");
+        sb.Append("    lone = [v for v in bm.verts if not v.link_edges]\n");
+        sb.Append("    if lone: bmesh.ops.delete(bm, geom=lone, context='VERTS')\n");
+        sb.Append("    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])\n");
+        sb.Append("    boundary = [e for e in bm.edges if e.is_boundary]\n");
+        sb.Append("    if boundary: bmesh.ops.holes_fill(bm, edges=boundary, sides=0)\n");
+        sb.Append("    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])\n");
+        sb.Append("    bm.to_mesh(t.data)\n");
+        sb.Append("    bm.free()\n");
+        sb.Append("    t.data.update()\n");
+        sb.Append("    bad1, vol1, n1 = bm_check(t)\n");
+        sb.Append("    if bad1 > bad0:\n");
+        sb.Append("        broken = t.data\n");
+        sb.Append("        t.data = old\n");
+        sb.Append("        bpy.data.meshes.remove(broken)\n");
+        sb.Append("        print(\"ERROR: the repair made the mesh worse (non-manifold edges %d -> %d); the object was left unchanged\" % (bad0, bad1))\n");
+        sb.Append("    else:\n");
+        sb.Append("        bpy.data.meshes.remove(old)\n");
+        sb.Append("        print(\"OK \" + t.name + \" repaired: non-manifold edges %d -> %d, vertices %d -> %d, volume %.4f\" % (bad0, bad1, n0, n1, vol1))");
+        return (sb.ToString(), null);
+    }
+
+    private static (string? Script, string? Error) BuildDelete(string lit)
+    {
+        var sb = new StringBuilder();
+        sb.Append("import bpy\n");
+        sb.Append($"o = bpy.data.objects.get({lit})\n");
+        sb.Append("if o is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("else:\n");
+        sb.Append("    n = o.name\n");
+        sb.Append("    bpy.data.objects.remove(o, do_unlink=True)\n");
+        sb.Append("    print(\"OK deleted \" + n)");
+        return (sb.ToString(), null);
+    }
+
+    /// <summary>Folder where export_stl writes. The model never chooses a path, only a file name inside this folder.</summary>
+    public static string ExportDir =>
+        Environment.GetEnvironmentVariable("BLENDER_MINOR_EXPORT_DIR")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "blender-minor-exports");
+
+    private static readonly Regex SafeFile = new(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", RegexOptions.Compiled);
+
+    private static (string? Script, string? Error) BuildExport(string lit, JsonElement args)
+    {
+        string? file = ShapeScripts.Text(args, "filename");
+        if (string.IsNullOrWhiteSpace(file))
+            file = ShapeScripts.CleanName(ShapeScripts.Text(args, "name"), "export").Replace(' ', '_');
+        if (!file.EndsWith(".stl", StringComparison.OrdinalIgnoreCase)) file += ".stl";
+        if (!SafeFile.IsMatch(file))
+            return (null, "Argument 'filename' must be a plain file name (letters, digits, '.', '_' or '-'), without folders.");
+        string full = Path.Combine(ExportDir, file);
+        string pathLit = JsonSerializer.Serialize(full);
+        var sb = new StringBuilder();
+        sb.Append("import bpy, os\n");
+        sb.Append($"o = bpy.data.objects.get({lit})\n");
+        sb.Append("if o is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("elif o.type != 'MESH':\n");
+        sb.Append("    print(\"ERROR: \" + o.name + \" is \" + o.type + \"; export_stl needs a MESH object\")\n");
+        sb.Append("else:\n");
+        sb.Append($"    path = {pathLit}\n");
+        sb.Append("    os.makedirs(os.path.dirname(path), exist_ok=True)\n");
+        sb.Append("    bpy.ops.object.select_all(action='DESELECT')\n");
+        sb.Append("    o.select_set(True)\n");
+        sb.Append("    bpy.context.view_layer.objects.active = o\n");
+        sb.Append("    bpy.ops.wm.stl_export(filepath=path, export_selected_objects=True, apply_modifiers=True)\n");
+        sb.Append("    print(\"OK exported \" + o.name + \" to \" + path + \" (\" + str(os.path.getsize(path)) + \" bytes)\")");
+        return (sb.ToString(), null);
+    }
+
+    private static (string? Script, string? Error) BuildUnits(JsonElement args)
+    {
+        string unit = (ShapeScripts.Text(args, "unit") ?? "mm").ToLowerInvariant();
+        var (scale, name) = unit switch
+        {
+            "mm" or "millimeter" or "millimeters" => ("0.001", "MILLIMETERS"),
+            "cm" or "centimeter" or "centimeters" => ("0.01", "CENTIMETERS"),
+            "m" or "meter" or "meters" => ("1.0", "METERS"),
+            _ => ("", ""),
+        };
+        if (scale.Length == 0) return (null, $"Invalid unit '{unit}'. Use mm, cm or m.");
+        var sb = new StringBuilder();
+        sb.Append("import bpy\n");
+        sb.Append("u = bpy.context.scene.unit_settings\n");
+        sb.Append("u.system = 'METRIC'\n");
+        sb.Append($"u.scale_length = {scale}\n");
+        sb.Append($"u.length_unit = '{name}'\n");
+        sb.Append($"print(\"OK units set: 1 Blender unit = 1 {unit}\")");
+        return (sb.ToString(), null);
+    }
+
     private static readonly Dictionary<string, string> OperationNames = new(StringComparer.OrdinalIgnoreCase)
     {
         ["union"] = "UNION", ["add"] = "UNION", ["join"] = "UNION",
@@ -286,15 +472,8 @@ public static class OpScripts
                 return (null, $"Invalid operation '{given}'. Use UNION, DIFFERENCE or INTERSECT.");
             op = mapped;
         }
-        bool deleteCutter = true;
-        if (ShapeScripts.Has(args, "delete_cutter"))
-        {
-            var el = args.GetProperty("delete_cutter");
-            if (el.ValueKind == JsonValueKind.True) deleteCutter = true;
-            else if (el.ValueKind == JsonValueKind.False) deleteCutter = false;
-            else if (el.ValueKind == JsonValueKind.String && bool.TryParse(el.GetString(), out var b)) deleteCutter = b;
-            else return (null, "Argument 'delete_cutter' must be true or false.");
-        }
+        var (deleteCutter, db) = ReadBool(args, "delete_cutter", true);
+        if (db is not null) return (null, db);
         var sb = new StringBuilder(PyHelpers).Append('\n');
         sb.Append($"t = bpy.data.objects.get({tl})\n");
         sb.Append($"c = bpy.data.objects.get({cl})\n");
@@ -312,19 +491,44 @@ public static class OpScripts
         return (sb.ToString(), null);
     }
 
-    private static (string? Script, string? Error) BuildDrill(string lit, JsonElement args)
+    private static (string? Script, string? Error) BuildDrill(string lit, JsonElement args, string? label)
     {
-        var (dia, ed) = ShapeScripts.Number(args, "diameter", 0, 0.01, 10000); if (ed is not null) return (null, ed);
         if (!ShapeScripts.Has(args, "diameter")) return (null, "Argument 'diameter' is required.");
+        var (dia, ed) = ShapeScripts.Number(args, "diameter", 0, 0.01, 10000); if (ed is not null) return (null, ed);
         var (clr, ecl) = ShapeScripts.Number(args, "clearance", 0, 0, 10); if (ecl is not null) return (null, ecl);
         var (segf, esg) = ShapeScripts.Number(args, "segments", 64, 8, 256); if (esg is not null) return (null, esg);
         int seg = (int)Math.Round(segf);
         string axis = (ShapeScripts.Text(args, "axis") ?? "Z").ToUpperInvariant();
         if (axis is not ("X" or "Y" or "Z")) return (null, $"Invalid axis '{axis}'. Use X, Y or Z.");
         int ai = axis[0] - 'X';
+        string sideText = (ShapeScripts.Text(args, "side") ?? "+").ToLowerInvariant();
+        int d = sideText switch { "+" or "top" or "pos" or "positive" => 1, "-" or "bottom" or "neg" or "negative" => -1, _ => 0 };
+        if (d == 0) return (null, $"Invalid side '{sideText}'. Use + or - (the side of the axis where the hole starts).");
         bool through = !ShapeScripts.Has(args, "depth");
         double depth = 0;
         if (!through) { var (dp, ep) = ShapeScripts.Number(args, "depth", 0, 0.001, 10000); if (ep is not null) return (null, ep); depth = dp; }
+
+        // Optional recess at the entry: a counterbore (cylinder) or a countersink (90 degree cone), never both.
+        bool hasCb = ShapeScripts.Has(args, "counterbore_diameter") || ShapeScripts.Has(args, "counterbore_depth");
+        bool hasCs = ShapeScripts.Has(args, "countersink_diameter");
+        if (hasCb && hasCs) return (null, "Use either a counterbore or a countersink, not both.");
+        double cbD = 0, cbH = 0, csD = 0;
+        if (hasCb)
+        {
+            if (!ShapeScripts.Has(args, "counterbore_diameter") || !ShapeScripts.Has(args, "counterbore_depth"))
+                return (null, "A counterbore needs both counterbore_diameter and counterbore_depth.");
+            var (a1, e1) = ShapeScripts.Number(args, "counterbore_diameter", 0, 0.01, 10000); if (e1 is not null) return (null, e1);
+            var (a2, e2) = ShapeScripts.Number(args, "counterbore_depth", 0, 0.001, 10000); if (e2 is not null) return (null, e2);
+            if (a1 <= dia) return (null, "counterbore_diameter must be larger than the hole diameter.");
+            cbD = a1; cbH = a2;
+            if (!through && cbH >= depth) return (null, "counterbore_depth must be smaller than the hole depth.");
+        }
+        if (hasCs)
+        {
+            var (a1, e1) = ShapeScripts.Number(args, "countersink_diameter", 0, 0.01, 10000); if (e1 is not null) return (null, e1);
+            if (a1 <= dia) return (null, "countersink_diameter must be larger than the hole diameter.");
+            csD = a1;
+        }
 
         // Position of the hole axis. The two coordinates across the hole are required; the one ALONG the axis is
         // only needed for a blind hole (it is the entry point).
@@ -345,9 +549,17 @@ public static class OpScripts
             pos[i] = v;
         }
 
-        double radius = (dia + clr) / 2;
+        double holeR = (dia + clr) / 2;
         double margin = Math.Max(0.5, dia * 0.25);   // the cutter sticks out of the part: no coplanar faces
         string rot = ai switch { 0 => "(0, 1.5707963267948966, 0)", 1 => "(1.5707963267948966, 0, 0)", _ => "(0, 0, 0)" };
+        // the cone's wide end must point out of the part, on the entry side
+        const string H = "1.5707963267948966";
+        string coneRot = (ai, d) switch
+        {
+            (2, 1) => "(0, 0, 0)", (2, -1) => "(3.141592653589793, 0, 0)",
+            (0, 1) => $"(0, {H}, 0)", (0, -1) => $"(0, -{H}, 0)",
+            (1, 1) => $"(-{H}, 0, 0)", _ => $"({H}, 0, 0)",
+        };
         string where = through
             ? "(" + string.Join(", ", Enumerable.Range(0, 3).Select(i => i == ai ? "*" : N(pos[i]))) + ")"
             : $"({N(pos[0])}, {N(pos[1])}, {N(pos[2])})";
@@ -356,29 +568,101 @@ public static class OpScripts
         sb.Append($"t = bpy.data.objects.get({lit})\n");
         sb.Append("if t is None:\n").Append(Missing(lit)).Append('\n');
         sb.Append("elif t.type != 'MESH':\n");
-        sb.Append("    print(\"ERROR: \" + t.name + \" is \" + t.type + \"; drill_hole needs a MESH object\")\n");
+        sb.Append("    print(\"ERROR: \" + t.name + \" is \" + t.type + \"; drilling needs a MESH object\")\n");
         sb.Append("else:\n");
         sb.Append($"    pos = [{N(pos[0])}, {N(pos[1])}, {N(pos[2])}]\n");
         sb.Append($"    ai = {ai}\n");
+        sb.Append($"    d = {d}\n");
         sb.Append("    corners = [t.matrix_world @ Vector(v) for v in t.bound_box]\n");
         sb.Append("    lo = min(v[ai] for v in corners)\n");
         sb.Append("    hi = max(v[ai] for v in corners)\n");
         if (through)
-            sb.Append($"    start = hi + {N(margin)}\n    end = lo - {N(margin)}\n");
+            sb.Append($"    e = hi if d > 0 else lo\n    start = hi + {N(margin)}\n    end = lo - {N(margin)}\n");
         else
-            sb.Append($"    start = pos[ai] + {N(margin)}\n    end = pos[ai] - {N(depth)}\n");
+            sb.Append($"    e = pos[ai]\n    start = e + d * {N(margin)}\n    end = e - d * {N(depth)}\n");
         sb.Append("    center = list(pos)\n");
         sb.Append("    center[ai] = (start + end) / 2\n");
-        sb.Append($"    bpy.ops.mesh.primitive_cylinder_add(vertices={seg}, radius={N(radius)}, depth=abs(start - end), location=tuple(center), rotation={rot})\n");
+        sb.Append($"    bpy.ops.mesh.primitive_cylinder_add(vertices={seg}, radius={N(holeR)}, depth=abs(start - end), location=tuple(center), rotation={rot})\n");
         sb.Append("    cutter = bpy.context.active_object\n");
         sb.Append("    cutter.name = 'BM_hole_cutter'\n");
         sb.Append("    err = bm_boolean(t, cutter, 'DIFFERENCE')\n");
         sb.Append("    bpy.data.objects.remove(cutter, do_unlink=True)\n");
+        string recess = "";
+        if (hasCb || hasCs)
+        {
+            double m2 = Math.Max(0.5, (hasCb ? cbD : csD) * 0.1);
+            sb.Append("    if not err:\n");
+            sb.Append("        c2 = list(pos)\n");
+            if (hasCb)
+            {
+                double cbR = (cbD + clr) / 2;
+                sb.Append($"        c2[ai] = e + d * ({N(m2)} - {N(cbH)}) / 2\n");
+                sb.Append($"        bpy.ops.mesh.primitive_cylinder_add(vertices={seg}, radius={N(cbR)}, depth={N(cbH + m2)}, location=tuple(c2), rotation={rot})\n");
+                recess = $" counterbore {N(cbD + clr)}x{N(cbH)}";
+            }
+            else
+            {
+                double csR = (csD + clr) / 2;
+                double h = csR - holeR;   // 90 degree cone: the radius grows 1:1 with the depth
+                sb.Append($"        c2[ai] = e + d * ({N(m2)} - {N(h)}) / 2\n");
+                sb.Append($"        bpy.ops.mesh.primitive_cone_add(vertices={seg}, radius1={N(holeR)}, radius2={N(csR + m2)}, depth={N(h + m2)}, location=tuple(c2), rotation={coneRot})\n");
+                recess = $" countersink {N(csD + clr)}";
+            }
+            sb.Append("        cutter2 = bpy.context.active_object\n");
+            sb.Append("        cutter2.name = 'BM_recess_cutter'\n");
+            sb.Append("        err = bm_boolean(t, cutter2, 'DIFFERENCE')\n");
+            sb.Append("        bpy.data.objects.remove(cutter2, do_unlink=True)\n");
+            sb.Append("        if err: err = 'the hole was drilled but the recess failed: ' + err\n");
+        }
         sb.Append("    if err:\n        print(\"ERROR: \" + err)\n");
         sb.Append("    else:\n");
         sb.Append("        bad, vol, n = bm_check(t)\n");
         string kind = through ? "through" : $"depth {N(depth)}";
-        sb.Append($"        print(\"OK \" + t.name + \" hole diameter {N(dia + clr)} at {where} axis {axis} {kind} vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)))");
+        string tag = label is null ? "" : $" [{label}]";
+        sb.Append($"        print(\"OK \" + t.name + \" hole diameter {N(dia + clr)} at {where} axis {axis} {kind}{recess}{tag} vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)))");
         return (sb.ToString(), null);
+    }
+
+    private static (string? Script, string? Error) BuildScrewHole(string lit, JsonElement args)
+    {
+        string size = (ShapeScripts.Text(args, "size") ?? "M3").Trim().ToUpperInvariant();
+        string kind = (ShapeScripts.Text(args, "kind") ?? "clearance").Trim().ToLowerInvariant();
+        var (table, _) = Screws.Load();
+        if (!table.TryGetValue(size, out var row))
+            return (null, $"Unknown screw size '{size}'. Known sizes: {string.Join(", ", table.Keys.OrderBy(k => k))}.");
+        string? Get(string key, out double v) { if (row.TryGetValue(key, out v)) return null; return $"The screw table has no '{key}' for {size}."; }
+
+        var o = new JsonObject();
+        foreach (var k in new[] { "x", "y", "z", "axis", "side", "depth", "segments" })
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(k, out var v)) o[k] = JsonNode.Parse(v.GetRawText());
+        double clearance, cbD, cbH, csD, insD, insH;
+        switch (kind)
+        {
+            case "clearance":
+                if (Get("clearance", out clearance) is { } e0) return (null, e0);
+                o["diameter"] = clearance;
+                break;
+            case "counterbore":
+                if (Get("clearance", out clearance) is { } e1) return (null, e1);
+                if (Get("counterbore_diameter", out cbD) is { } e2) return (null, e2);
+                if (Get("counterbore_depth", out cbH) is { } e3) return (null, e3);
+                o["diameter"] = clearance; o["counterbore_diameter"] = cbD; o["counterbore_depth"] = cbH;
+                break;
+            case "countersunk" or "countersink":
+                if (Get("clearance", out clearance) is { } e4) return (null, e4);
+                if (Get("countersink_diameter", out csD) is { } e5) return (null, e5);
+                o["diameter"] = clearance; o["countersink_diameter"] = csD;
+                break;
+            case "insert":
+                if (Get("insert_diameter", out insD) is { } e6) return (null, e6);
+                if (Get("insert_depth", out insH) is { } e7) return (null, e7);
+                o["diameter"] = insD;
+                if (!o.ContainsKey("depth")) o["depth"] = insH;
+                break;
+            default:
+                return (null, $"Invalid kind '{kind}'. Use clearance, counterbore, countersunk or insert.");
+        }
+        using var doc = JsonDocument.Parse(o.ToJsonString());
+        return BuildDrill(lit, doc.RootElement, $"{size} {kind}");
     }
 }

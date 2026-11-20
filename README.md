@@ -39,19 +39,32 @@ as `roxa`) or `#RRGGBB`.
 | `create_cylinder` | `radius`, `height`, ... | creates a cylinder |
 | `create_cone` | `radius`, `height`, ... | creates a cone |
 | `create_torus` | `major_radius`, `minor_radius`, ... | creates a torus |
+| `create_plane` | `size`, ... | creates a flat square plane |
+| `create_icosphere` | `radius`, `subdivisions`, ... | creates an icosphere (a sphere made of triangles) |
 | `list_objects` | none | lists the scene as short text: `name TYPE (x, y, z)` |
 | `move_object` | `name` (required), `x`, `y`, `z`, `relative` | moves an existing object by name; axes you omit stay put |
 | `bevel_object` | `name` (required), `width`, `segments` | adds/updates a Bevel modifier on an existing mesh |
 | `create_box` | `width`, `depth`, `height`, `x`, `y`, `z`, `color`, `name` | a box with exact sizes (x, y, z = its center) |
 | `set_dimensions` | `name` (required), `x`, `y`, `z` | sets the exact size of an existing object |
 | `boolean_op` | `target`, `cutter` (required), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT of two objects; **transactional** (see below) |
-| `drill_hole` | `name`, `diameter` (required), `x`, `y`, `z`, `axis`, `depth`, `clearance`, `segments` | a round hole of an exact diameter, through or blind, along X, Y or Z |
+| `drill_hole` | `name`, `diameter` (required), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | a round hole of an exact diameter, through or blind, along X, Y or Z, with an optional counterbore (recess for a screw head) or 90 degree countersink |
+| `screw_hole` | `name` (required), `size` (M2 to M8), `kind`, `x`, `y`, `z`, `axis`, `side`, `depth` | a hole for a standard screw from a table: `clearance`, `counterbore`, `countersunk` or `insert` (blind hole for a heat-set insert) |
+| `set_color` | `name`, `color` (required), `roughness`, `specular` | changes the material of an existing object |
+| `repair_mesh` | `name` (required), `tolerance` | merges duplicate vertices, removes loose parts, fixes normals, fills holes; reports before/after; undone if it makes things worse |
+| `delete_object` | `name` (required) | deletes one object by name |
+| `export_stl` | `name` (required), `filename` | exports a binary STL for the slicer, **only a plain file name** into the export folder |
+| `set_units` | `unit` (`mm`, `cm`, `m`) | sets the scene so that 1 Blender unit = 1 mm (or cm, m) |
 | `check_mesh` | `name` (required) | closed (manifold) or not, volume and dimensions |
 
 **Booleans are transactional.** Triangle-mesh booleans fail on dirty meshes. `boolean_op` and `drill_hole` keep a copy of the
 mesh, apply the operation (Exact solver), check that the result is a closed mesh with a volume, and **put the old mesh back with a
 clear error** if it is not. `drill_hole` cuts with a cylinder that sticks out of the part on both sides (no coplanar faces); the hole is
 a 64-sided polygon inscribed in the circle (a 3 mm hole is 2.996 mm across the flats), and `clearance` adds to the diameter for 3D printing.
+
+**Screw table.** `screw_hole` uses typical values (ISO 273 medium clearance, ISO 4762 socket-cap recess, ISO 10642 countersunk
+head, common brass heat-set inserts; for M3: clearance 3.4, recess 6.0 x 3.0, insert 4.0 x 5.7). They are a **starting point**:
+check them against your screws, inserts and printer. Override any field without recompiling in
+`~/.config/blender-minor/screws.json` (or `BLENDER_MINOR_SCREWS`), for example `{"M3": {"clearance": 3.5, "insert_diameter": 4.2}}`.
 
 Design rules (the point of the project):
 
@@ -178,6 +191,9 @@ python3 -I eval/evaluate_model.py --label my-model --system prompts/system.en.tx
 - The API has **no authentication**. It listens on `127.0.0.1` by default. `BLENDER_MINOR_HOST=0.0.0.0` lets anyone who
   can reach the port create objects in your Blender; only do that on a network you trust.
 - The model never sends code. It can only fill validated fields of fixed templates.
+- `export_stl` never accepts a path: only a plain file name, written to `~/blender-minor-exports` (or `BLENDER_MINOR_EXPORT_DIR`).
+  This is on purpose: a free path would let the model write anywhere on disk.
+- `delete_object` is destructive. If your MCP client lets you choose which tools a model may call, leave it out for small models.
 - The Blender MCP server you connect behind it may expose arbitrary Python execution (`execute_blender_code`).
   **Do not give that tool to the model**; give it only `blender-minor`.
 
@@ -186,10 +202,11 @@ python3 -I eval/evaluate_model.py --label my-model --system prompts/system.en.tx
 Aimed at modeling parts for 3D printing by conversation, with exact sizes and holes in the right places:
 
 - [x] `create_box`, `set_dimensions`, `boolean_op` (transactional), `drill_hole` (through/blind, clearance), `check_mesh`
-- [ ] `drill_hole`: counterbore and countersink, and a `screw_hole` with standard sizes (M3 clearance, head recess, heat-set insert)
-- [ ] `repair_mesh(name)`: merge by distance, fix normals, fill holes, remove loose parts (report before/after)
-- [ ] `export_stl(name, path)` and millimeter units
-- [ ] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
+- [x] counterbore and countersink in `drill_hole`, and `screw_hole` with a standard-size table
+- [x] `repair_mesh`, `export_stl` (file name only, fixed export folder), `set_units`
+- [x] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
+- [ ] fillets (`bevel_object` on chosen edges), rectangular pockets and slots, patterns of holes
+- [ ] a threaded-hole option and a configurable insert pocket depth per material
 
 Ideas and pull requests are welcome.
 

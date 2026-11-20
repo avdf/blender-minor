@@ -27,6 +27,10 @@ public static class ShapeScripts
             [new("radius", "radius1", 1, 0.001, 1000), new("height", "depth", 2, 0.001, 1000)]),
         new("create_torus", "Torus", "Create a torus (donut) in Blender.", "primitive_torus_add", "",
             [new("major_radius", "major_radius", 1, 0.001, 1000), new("minor_radius", "minor_radius", 0.25, 0.001, 1000)]),
+        new("create_plane", "Plane", "Create a flat square plane in Blender.", "primitive_plane_add", "",
+            [new("size", "size", 2, 0.001, 1000)]),
+        new("create_icosphere", "Icosphere", "Create an icosphere (a sphere made of triangles) in Blender.", "primitive_ico_sphere_add", "",
+            [new("radius", "radius", 1, 0.001, 1000), new("subdivisions", "subdivisions", 2, 1, 6)]),
     ];
 
     public static Shape? Find(string tool) => Shapes.FirstOrDefault(s => s.Tool == tool);
@@ -56,7 +60,7 @@ public static class ShapeScripts
 
     // Markers accepted in each template (a file using any marker not listed here is ignored).
     private static readonly string[] BaseFixed = ["FUNC", "ARGS", "NAME", "X", "Y", "Z"];
-    private static readonly HashSet<string> MaterialAllowed = ["NAME", "COLOR", "ROUGHNESS", "SPECULAR"];
+    internal static readonly HashSet<string> MaterialAllowed = ["NAME", "COLOR", "ROUGHNESS", "SPECULAR"];
     private static readonly HashSet<string> FooterAllowed = ["NAME"];
 
     public static HashSet<string> BaseAllowed(Shape shape) =>
@@ -162,7 +166,7 @@ public static class ShapeScripts
         return (v, null);
     }
 
-    private static string CleanName(string? raw, string fallback)
+    internal static string CleanName(string? raw, string fallback)
     {
         if (string.IsNullOrWhiteSpace(raw)) return fallback;
         string s = Regex.Replace(raw, @"[^\p{L}\p{N} _.\-]", "").Trim();
@@ -170,7 +174,7 @@ public static class ShapeScripts
         return s.Length == 0 ? fallback : s;
     }
 
-    private static (double R, double G, double B)? ParseColor(string text)
+    internal static (double R, double G, double B)? ParseColor(string text)
     {
         if (NamedColors.TryGetValue(text.Trim(), out var named)) return Linear(named);
         var m = Regex.Match(text.Trim(), @"^#?([0-9a-fA-F]{6})$");

@@ -19,18 +19,42 @@ public static class SelfTest
     // Tools that work on objects act on a cube created first, named SelfTestCube (size 2, centered at the origin).
     // Setup = extra cubes created before the cases (e.g. a cutter). MissingJson = a call naming an object that does not
     // exist, which must answer with a clear "ERROR: object not found" and never a traceback (null = not applicable).
-    private sealed record OpPlan(string[] Cases, string[] Setup, string? MissingJson);
+    private sealed record OpPlan((string Tool, string Json)[] Setup, string[] Cases, string? MissingJson);
 
     private static readonly Dictionary<string, OpPlan> OpPlans = new()
     {
-        ["create_box"] = new(["""{"name":"SelfTestBox","width":4,"depth":2,"height":1,"x":10,"color":"blue"}"""], [], null),
-        ["set_dimensions"] = new(["""{"name":"SelfTestCube","x":3,"z":1.5}"""], [], """{"name":"DoesNotExist","x":1}"""),
-        ["move_object"] = new(["""{"name":"SelfTestCube","x":5,"y":1}""", """{"name":"SelfTestCube","z":2,"relative":true}"""], [], """{"name":"DoesNotExist","x":1}"""),
-        ["bevel_object"] = new(["""{"name":"SelfTestCube","width":0.1,"segments":2}""", """{"name":"SelfTestCube","width":0.05}"""], [], """{"name":"DoesNotExist","width":0.1}"""),
-        ["check_mesh"] = new(["""{"name":"SelfTestCube"}"""], [], """{"name":"DoesNotExist"}"""),
-        ["boolean_op"] = new(["""{"target":"SelfTestCube","cutter":"SelfTestCutter","operation":"DIFFERENCE"}"""], ["""{"name":"SelfTestCutter","size":1,"x":1}"""], """{"target":"DoesNotExist","cutter":"SelfTestCube"}"""),
-        ["drill_hole"] = new(["""{"name":"SelfTestCube","diameter":0.5,"x":0.3,"y":0.2}""", """{"name":"SelfTestCube","diameter":0.3,"x":-0.5,"y":-0.5,"z":1,"depth":0.4}"""], [], """{"name":"DoesNotExist","diameter":1,"x":0,"y":0}"""),
+        ["create_box"] = new([], ["""{"name":"SelfTestBox","width":4,"depth":2,"height":1,"x":10,"color":"blue"}"""], null),
+        ["set_dimensions"] = new([], ["""{"name":"SelfTestCube","x":3,"z":1.5}"""], """{"name":"DoesNotExist","x":1}"""),
+        ["set_color"] = new([], ["""{"name":"SelfTestCube","color":"blue"}""", """{"name":"SelfTestCube","color":"roxa","roughness":0.2}"""], """{"name":"DoesNotExist","color":"red"}"""),
+        ["move_object"] = new([], ["""{"name":"SelfTestCube","x":5,"y":1}""", """{"name":"SelfTestCube","z":2,"relative":true}"""], """{"name":"DoesNotExist","x":1}"""),
+        ["bevel_object"] = new([], ["""{"name":"SelfTestCube","width":0.1,"segments":2}""", """{"name":"SelfTestCube","width":0.05}"""], """{"name":"DoesNotExist","width":0.1}"""),
+        ["boolean_op"] = new([("create_cube", """{"name":"SelfTestCutter","size":1,"x":1}""")],
+            ["""{"target":"SelfTestCube","cutter":"SelfTestCutter","operation":"DIFFERENCE"}"""], """{"target":"DoesNotExist","cutter":"SelfTestCube"}"""),
+        ["drill_hole"] = new([],
+            ["""{"name":"SelfTestCube","diameter":0.5,"x":0.3,"y":0.2}""",
+             """{"name":"SelfTestCube","diameter":0.3,"x":-0.5,"y":-0.5,"z":1,"depth":0.4}""",
+             """{"name":"SelfTestCube","diameter":0.3,"x":0.5,"y":-0.5,"counterbore_diameter":0.6,"counterbore_depth":0.3}""",
+             """{"name":"SelfTestCube","diameter":0.2,"x":-0.5,"y":0.5,"countersink_diameter":0.5}"""],
+            """{"name":"DoesNotExist","diameter":1,"x":0,"y":0}"""),
+        ["screw_hole"] = new([("create_box", """{"name":"SelfTestPlate","width":40,"depth":40,"height":10}""")],
+            ["""{"name":"SelfTestPlate","size":"M3","x":0,"y":0}""",
+             """{"name":"SelfTestPlate","size":"M3","kind":"counterbore","x":10,"y":0}""",
+             """{"name":"SelfTestPlate","size":"M3","kind":"countersunk","x":-10,"y":0}""",
+             """{"name":"SelfTestPlate","size":"M3","kind":"insert","x":0,"y":10,"z":5}"""],
+            """{"name":"DoesNotExist","size":"M3","x":0,"y":0}"""),
+        ["check_mesh"] = new([], ["""{"name":"SelfTestCube"}"""], """{"name":"DoesNotExist"}"""),
+        ["repair_mesh"] = new([], ["""{"name":"SelfTestCube"}"""], """{"name":"DoesNotExist"}"""),
+        ["delete_object"] = new([("create_cube", """{"name":"SelfTestTrash"}""")], ["""{"name":"SelfTestTrash"}"""], """{"name":"DoesNotExist"}"""),
+        ["export_stl"] = new([], ["""{"name":"SelfTestCube","filename":"selftest.stl"}"""], """{"name":"DoesNotExist"}"""),
+        ["set_units"] = new([], ["""{"unit":"mm"}""", """{"unit":"m"}"""], null),
     };
+
+    /// <summary>Builds a script for either a shape tool or an object tool.</summary>
+    private static (string? Script, string? Error) BuildAny(string tool, JsonElement args)
+    {
+        if (ShapeScripts.Find(tool) is { } shape) return ShapeScripts.Build(shape, args);
+        return OpScripts.Find(tool) is { } op ? OpScripts.Build(op, args) : (null, $"Unknown tool '{tool}'.");
+    }
 
     public static async Task<int> RunAsync()
     {
@@ -47,6 +71,7 @@ public static class SelfTest
         Console.WriteLine();
 
         var tmp = Directory.CreateTempSubdirectory("blender-minor-selftest-");
+        Environment.SetEnvironmentVariable("BLENDER_MINOR_EXPORT_DIR", tmp.FullName);   // export_stl writes here, never to the real folder
         int failed = 0;
         try
         {
@@ -120,10 +145,10 @@ public static class SelfTest
                 var script = new System.Text.StringBuilder(prelude);
                 int expectedOk = 1;
                 string? opError = null;
-                foreach (var sj in plan.Setup)
+                foreach (var (stool, sj) in plan.Setup)
                 {
                     using var sd = JsonDocument.Parse(sj);
-                    var (ss, se) = ShapeScripts.Build(ShapeScripts.Find("create_cube")!, sd.RootElement);
+                    var (ss, se) = BuildAny(stool, sd.RootElement);
                     if (se is not null) { opError = se; break; }
                     script.Append(ss).Append('\n');
                     expectedOk++;

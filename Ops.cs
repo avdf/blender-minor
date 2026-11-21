@@ -58,6 +58,14 @@ public static class OpScripts
              new("width", "number", "bevel size, default 0.1"),
              new("segments", "number", "1 to 16, default 1")],
             ["name"]),
+        new("array_object",
+            "Repeat an existing object in a grid (Blender's Array modifier): count_x copies along X and count_y along Y, with a gap between neighbours. Use it to print many copies of a small part so each layer has time to cool. By default the copies are merged into the object, so check_mesh and export_stl see all of them. At most 400 copies.",
+            [NameProp,
+             new("count_x", "number", "copies along X, 1 to 100, default 1"),
+             new("count_y", "number", "copies along Y, 1 to 100, default 1"),
+             new("gap", "number", "space between copies (same unit as the scene), default 2"),
+             new("apply", "boolean", "merge the copies into the object, default true")],
+            ["name"]),
         new("boolean_op",
             "Combine two existing objects: UNION adds them, DIFFERENCE cuts the cutter out of the target, INTERSECT keeps only the overlap. The result replaces the target. If the result is a broken mesh the target is left unchanged and an error is returned.",
             [new("target", "string", "name of the object that is kept and modified"), new("cutter", "string", "name of the other object"),
@@ -126,6 +134,7 @@ public static class OpScripts
         "set_color" => WithObject(args, "name", (lit, a) => BuildSetColor(lit, a)),
         "move_object" => WithObject(args, "name", (lit, a) => BuildMove(lit, a)),
         "bevel_object" => WithObject(args, "name", (lit, a) => BuildBevel(lit, a)),
+        "array_object" => WithObject(args, "name", (lit, a) => BuildArray(lit, a)),
         "check_mesh" => WithObject(args, "name", (lit, a) => BuildCheck(lit)),
         "repair_mesh" => WithObject(args, "name", (lit, a) => BuildRepair(lit, a)),
         "delete_object" => WithObject(args, "name", (lit, a) => BuildDelete(lit)),
@@ -339,6 +348,58 @@ public static class OpScripts
         return (sb.ToString(), null);
     }
 
+    /// <summary>Repeats an object in a grid with two Array modifiers (X, then Y). The offset is RELATIVE to the part's own size:
+    /// factor = 1 + gap / size, so the real distance between copies is size + gap whatever the object's scale. With apply
+    /// (default) the modifiers are baked in order, so the copies become real geometry for check_mesh and export_stl.</summary>
+    private static (string? Script, string? Error) BuildArray(string lit, JsonElement args)
+    {
+        var (cx, ex) = ShapeScripts.Number(args, "count_x", 1, 1, 100); if (ex is not null) return (null, ex);
+        var (cy, ey) = ShapeScripts.Number(args, "count_y", 1, 1, 100); if (ey is not null) return (null, ey);
+        var (gap, eg) = ShapeScripts.Number(args, "gap", 2, 0, 1000); if (eg is not null) return (null, eg);
+        var (apply, ea) = ReadBool(args, "apply", true); if (ea is not null) return (null, ea);
+        int nx = (int)Math.Round(cx), ny = (int)Math.Round(cy);
+        if (nx * ny < 2) return (null, "count_x and count_y are both 1: there is nothing to repeat. Pass count_x and/or count_y.");
+        if (nx * ny > 400) return (null, $"{nx} x {ny} = {nx * ny} copies is too many (limit 400).");
+        string gs = N(gap), ap = apply ? "True" : "False";
+
+        var sb = new StringBuilder(PyHelpers).Append('\n');
+        sb.Append($"o = bpy.data.objects.get({lit})\n");
+        sb.Append("if o is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("elif o.type != 'MESH':\n");
+        sb.Append("    print(\"ERROR: \" + o.name + \" is \" + o.type + \"; array_object needs a MESH object\")\n");
+        sb.Append("else:\n");
+        sb.Append("    bpy.context.view_layer.update()\n");
+        sb.Append("    dx, dy = o.dimensions.x, o.dimensions.y\n");
+        sb.Append("    if dx < 1e-9 or dy < 1e-9:\n");
+        sb.Append("        print(\"ERROR: \" + o.name + \" has no size along X or Y\")\n");
+        sb.Append("    else:\n");
+        sb.Append("        for old in [m for m in o.modifiers if m.name.startswith('BM_Array')]: o.modifiers.remove(old)\n");
+        sb.Append($"        gap = {gs}\n");
+        sb.Append($"        if {nx.ToString(CultureInfo.InvariantCulture)} > 1:\n");
+        sb.Append("            m = o.modifiers.new('BM_ArrayX', 'ARRAY')\n");
+        sb.Append($"            m.count = {nx.ToString(CultureInfo.InvariantCulture)}\n");
+        sb.Append("            m.use_relative_offset = True\n");
+        sb.Append("            m.relative_offset_displace = (1 + gap / dx, 0, 0)\n");
+        sb.Append($"        if {ny.ToString(CultureInfo.InvariantCulture)} > 1:\n");
+        sb.Append("            m = o.modifiers.new('BM_ArrayY', 'ARRAY')\n");
+        sb.Append($"            m.count = {ny.ToString(CultureInfo.InvariantCulture)}\n");
+        sb.Append("            m.use_relative_offset = True\n");
+        sb.Append("            m.relative_offset_displace = (0, 1 + gap / dy, 0)\n");
+        sb.Append($"        if {ap}:\n");
+        sb.Append("            with bpy.context.temp_override(object=o, active_object=o, selected_objects=[o]):\n");
+        sb.Append("                for m in list(o.modifiers): bpy.ops.object.modifier_apply(modifier=m.name)\n");
+        sb.Append("        bpy.context.view_layer.update()\n");
+        sb.Append("        size = tuple(round(v, 3) for v in o.dimensions)\n");
+        sb.Append($"        txt = \"OK \" + o.name + \" array {nx.ToString(CultureInfo.InvariantCulture)} x {ny.ToString(CultureInfo.InvariantCulture)} = {(nx * ny).ToString(CultureInfo.InvariantCulture)} copies, gap {gs}, total size \" + str(size)\n");
+        sb.Append($"        if {ap}:\n");
+        sb.Append("            bad, vol, n = bm_check(o)\n");
+        sb.Append("            txt += \" volume=%.4f non_manifold_edges=%d\" % (vol, bad)\n");
+        sb.Append("        else:\n");
+        sb.Append("            txt += \" (modifiers kept, not applied yet)\"\n");
+        sb.Append("        print(txt)");
+        return (sb.ToString(), null);
+    }
+
     private static (string? Script, string? Error) BuildCheck(string lit)
     {
         var sb = new StringBuilder(PyHelpers).Append('\n');
@@ -431,7 +492,14 @@ public static class OpScripts
         sb.Append("    bpy.ops.object.select_all(action='DESELECT')\n");
         sb.Append("    o.select_set(True)\n");
         sb.Append("    bpy.context.view_layer.objects.active = o\n");
-        sb.Append("    bpy.ops.wm.stl_export(filepath=path, export_selected_objects=True, apply_modifiers=True)\n");
+        // Blender 4.0+ has the built-in operator wm.stl_export; Blender 3.x only has the bundled STL add-on (export_mesh.stl).
+        // Do NOT test with hasattr(bpy.ops...): bpy.ops answers for any name. bpy.types is a real registry.
+        sb.Append("    if hasattr(bpy.types, 'WM_OT_stl_export'):\n");
+        sb.Append("        bpy.ops.wm.stl_export(filepath=path, export_selected_objects=True, apply_modifiers=True)\n");
+        sb.Append("    else:\n");
+        sb.Append("        import addon_utils\n");
+        sb.Append("        addon_utils.enable('io_mesh_stl', default_set=False, persistent=False)\n");
+        sb.Append("        bpy.ops.export_mesh.stl(filepath=path, use_selection=True, use_mesh_modifiers=True)\n");
         sb.Append("    print(\"OK exported \" + o.name + \" to \" + path + \" (\" + str(os.path.getsize(path)) + \" bytes)\")");
         return (sb.ToString(), null);
     }

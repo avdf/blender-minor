@@ -63,12 +63,15 @@ The official MCP server finds the add-on through `BLENDER_MCP_HOST` / `BLENDER_M
 
 ## Status
 
-Tested on **Blender 3.6.23 (Python 3.10.13)**, Debian 13, Intel HD Graphics 4000 (OpenGL 4.2), headless:
+Tested on **Blender 3.6.23 (Python 3.10.13)**, Debian 13, Intel HD Graphics 4000 (OpenGL 4.2):
 
-- works: `execute_blender_code`, `get_objects_summary`, `execute_blender_code_for_cli` (needs a `blend_file`),
+- works, headless: `execute_blender_code`, `get_objects_summary`, `execute_blender_code_for_cli` (needs a `blend_file`),
   exact dimensions and a Boolean hole, blocked `read_factory_settings` with the server staying up;
-- **not tested**: the interactive mode with a window (auto-start timer in the preferences), the screenshot
-  and "jump to" tools (they need a window);
+- works, **with a window**: the add-on starts by itself (auto-start timer, port 9876) and the parts built through
+  blender-minor show up in the viewport;
+- all 22 blender-minor tools pass `BLENDER_BIN=/path/to/blender-3.6/blender dotnet BlenderMinor.dll --selftest`
+  (`export_stl` falls back to the bundled STL add-on, because 3.6 has no `wm.stl_export`);
+- **not tested**: the screenshot and "jump to" tools;
 - known gap: `bpy.data.file_path_foreach` does not exist in 3.6 (nor in 4.3), so the "missing files" tool
   does not work.
 

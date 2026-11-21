@@ -61,12 +61,15 @@ do 3.6. Depois rode o teste (o cabeçalho dele explica).
 
 ## Situação
 
-Testado no **Blender 3.6.23 (Python 3.10.13)**, Debian 13, Intel HD Graphics 4000 (OpenGL 4.2), sem janela:
+Testado no **Blender 3.6.23 (Python 3.10.13)**, Debian 13, Intel HD Graphics 4000 (OpenGL 4.2):
 
-- funciona: `execute_blender_code`, `get_objects_summary`, `execute_blender_code_for_cli` (exige um `blend_file`),
-  dimensões exatas e furo por Boolean, `read_factory_settings` bloqueado com o servidor continuando no ar;
-- **não testado**: o modo interativo com janela (início automático nas preferências) e as ferramentas de captura de
-  tela e de "ir para" (precisam de janela);
+- funciona, sem janela: `execute_blender_code`, `get_objects_summary`, `execute_blender_code_for_cli` (exige um
+  `blend_file`), dimensões exatas e furo por Boolean, `read_factory_settings` bloqueado com o servidor continuando no ar;
+- funciona, **com janela**: o add-on sobe sozinho (timer de início automático, porta 9876) e as peças feitas pelo
+  blender-minor aparecem na vista 3D;
+- as 22 ferramentas do blender-minor passam em `BLENDER_BIN=/caminho/blender-3.6/blender dotnet BlenderMinor.dll --selftest`
+  (o `export_stl` cai para o add-on de STL que acompanha o Blender, porque o 3.6 não tem `wm.stl_export`);
+- **não testado**: as ferramentas de captura de tela e de "ir para";
 - limitação conhecida: `bpy.data.file_path_foreach` não existe no 3.6 (nem no 4.3), então a ferramenta de
   "arquivos faltando" não funciona.
 

@@ -47,7 +47,8 @@ feminino, como `roxa`) ou `#RRGGBB`.
 | `list_objects` | nenhum | lista a cena em texto curto: `nome TIPO (x, y, z)` |
 | `move_object` | `name` (obrigatório), `x`, `y`, `z`, `relative` | move um objeto existente pelo nome; eixos omitidos ficam parados |
 | `bevel_object` | `name` (obrigatório), `width`, `segments` | adiciona/atualiza um modificador Bevel num objeto existente |
-| `create_box` | `width`, `depth`, `height`, `x`, `y`, `z`, `color`, `name` | uma caixa com medidas exatas (x, y, z = o centro dela) |
+| `array_object` | `name` (obrigatório), `count_x`, `count_y`, `gap`, `apply` | repete um objeto em grade com o modificador Array do Blender, para imprimir várias cópias de uma peça pequena e cada camada ter tempo de esfriar; por padrão as cópias viram parte do objeto (`apply`), então `check_mesh` e `export_stl` enxergam todas; no máximo 400 cópias |
+| `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | uma caixa com medidas exatas (x, y, z = o centro dela) |
 | `set_dimensions` | `name` (obrigatório), `x`, `y`, `z` | define o tamanho exato de um objeto existente |
 | `boolean_op` | `target`, `cutter` (obrigatórios), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT de dois objetos; **transacional** (veja abaixo) |
 | `drill_hole` | `name`, `diameter` (obrigatórios), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | furo redondo de diâmetro exato, passante ou cego, nos eixos X, Y ou Z, com **rebaixo** opcional (para a cabeça do parafuso) ou **escareado** de 90° |
@@ -140,7 +141,8 @@ certo sem um `OK`, sempre passar `color` quando uma cor for citada, copiar os no
 Para **peças com medida exata e furos** (impressão 3D, laser) existe um prompt mais curto que lista só as ferramentas
 desse trabalho: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt) (em inglês). Ele combina com a lista
 `--allow` da [ponte stdio](#usando-com-o-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `boolean_op`, `move_object`,
-`list_objects`, `check_mesh`, `export_stl`), então o modelo enxerga a mesma lista curta que o prompt descreve.
+`array_object`, `list_objects`, `check_mesh`, `export_stl`), então o modelo enxerga a mesma lista curta que o prompt
+descreve.
 
 ## Quando o Blender mudar a API: override por arquivo
 

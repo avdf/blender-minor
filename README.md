@@ -47,7 +47,8 @@ as `roxa`) or `#RRGGBB`.
 | `list_objects` | none | lists the scene as short text: `name TYPE (x, y, z)` |
 | `move_object` | `name` (required), `x`, `y`, `z`, `relative` | moves an existing object by name; axes you omit stay put |
 | `bevel_object` | `name` (required), `width`, `segments` | adds/updates a Bevel modifier on an existing mesh |
-| `create_box` | `width`, `depth`, `height`, `x`, `y`, `z`, `color`, `name` | a box with exact sizes (x, y, z = its center) |
+| `array_object` | `name` (required), `count_x`, `count_y`, `gap`, `apply` | repeats an object in a grid with Blender's Array modifier, for printing many copies of a small part so each layer can cool; merged into the object by default (`apply`), so `check_mesh` and `export_stl` see every copy; max 400 copies |
+| `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | a box with exact sizes (x, y, z = its center) |
 | `set_dimensions` | `name` (required), `x`, `y`, `z` | sets the exact size of an existing object |
 | `boolean_op` | `target`, `cutter` (required), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT of two objects; **transactional** (see below) |
 | `drill_hole` | `name`, `diameter` (required), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | a round hole of an exact diameter, through or blind, along X, Y or Z, with an optional counterbore (recess for a screw head) or 90 degree countersink |
@@ -160,7 +161,8 @@ without an `OK`, always pass `color` when one is mentioned, copy object names ex
 For **parts with exact sizes and holes** (3D printing, laser) there is a shorter prompt that lists only the tools that
 job needs: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt). It matches the `--allow` list of the
 [stdio bridge](#using-it-from-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `boolean_op`, `move_object`,
-`list_objects`, `check_mesh`, `export_stl`), so the model sees the same short tool list that the prompt describes.
+`array_object`, `list_objects`, `check_mesh`, `export_stl`), so the model sees the same short tool list that the prompt
+describes.
 
 ## When Blender changes its API: file override
 

@@ -28,6 +28,8 @@ public static class SelfTest
         ["set_color"] = new([], ["""{"name":"SelfTestCube","color":"blue"}""", """{"name":"SelfTestCube","color":"roxa","roughness":0.2}"""], """{"name":"DoesNotExist","color":"red"}"""),
         ["move_object"] = new([], ["""{"name":"SelfTestCube","x":5,"y":1}""", """{"name":"SelfTestCube","z":2,"relative":true}"""], """{"name":"DoesNotExist","x":1}"""),
         ["bevel_object"] = new([], ["""{"name":"SelfTestCube","width":0.1,"segments":2}""", """{"name":"SelfTestCube","width":0.05}"""], """{"name":"DoesNotExist","width":0.1}"""),
+        ["array_object"] = new([("create_box", """{"name":"SelfTestPiece","width":5,"depth":5,"height":2}""")],
+            ["""{"name":"SelfTestPiece","count_x":3,"count_y":2,"gap":1}""", """{"name":"SelfTestCube","count_x":2,"apply":false}"""], """{"name":"DoesNotExist","count_x":2}"""),
         ["boolean_op"] = new([("create_cube", """{"name":"SelfTestCutter","size":1,"x":1}""")],
             ["""{"target":"SelfTestCube","cutter":"SelfTestCutter","operation":"DIFFERENCE"}"""], """{"target":"DoesNotExist","cutter":"SelfTestCube"}"""),
         ["drill_hole"] = new([],

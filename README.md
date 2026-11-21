@@ -255,7 +255,7 @@ LAN addresses and home directories are replaced before anything is written. `eva
 
 ### Run the model as a service
 
-The small model's llama-server can run under systemd too, so it comes back after a power cut: see [`deploy/llama-blender.service.example`](deploy/llama-blender.service.example). It waits for blender-minor to answer before starting (llama-server only discovers the tools when it starts) and retries every 20 seconds if that machine is still booting.
+The small model's llama-server can run under systemd too, so it comes back after a power cut: see [`deploy/llama-blender.service.example`](deploy/llama-blender.service.example). It waits for blender-minor to list its tools before starting (llama-server only discovers the tools when it starts), and fails and starts again if it found none: a real reboot showed that a loaded boot can return 0 tools while the server looks healthy. The two small guard scripts are in `deploy/`.
 
 ## Security
 

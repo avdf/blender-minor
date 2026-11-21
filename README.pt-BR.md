@@ -237,7 +237,7 @@ Endereços da rede local e diretórios pessoais são trocados antes de gravar. `
 
 ### Rodar o modelo como serviço
 
-O llama-server do modelo pequeno também pode rodar no systemd, para voltar sozinho depois de uma queda de luz: veja [`deploy/llama-blender.service.example`](deploy/llama-blender.service.example). Ele espera o blender-minor responder antes de subir (o llama-server só descobre as ferramentas ao iniciar) e tenta de novo a cada 20 segundos se aquela máquina ainda estiver ligando.
+O llama-server do modelo pequeno também pode rodar no systemd, para voltar sozinho depois de uma queda de luz: veja [`deploy/llama-blender.service.example`](deploy/llama-blender.service.example). Ele espera o blender-minor listar as ferramentas antes de subir (o llama-server só descobre as ferramentas ao iniciar), e falha e sobe de novo se não achou nenhuma: um reboot de verdade mostrou que um boot carregado pode devolver 0 ferramentas com o servidor parecendo saudável. Os dois scripts de guarda estão em `deploy/`.
 
 ## Segurança
 

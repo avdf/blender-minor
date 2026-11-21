@@ -5,26 +5,29 @@
 #
 # - mcp.json is the file from the README (the stdio bridge with --allow and --hide). Keep it next to the llama-server on a fast
 #   disk: the bridge is a small Python file that llama-server starts itself.
-# - llama-server finds the tools only when it STARTS, so the unit waits until blender-minor answers (up to 2 minutes). If that
-#   machine is still booting, the start fails and systemd tries again every 20 seconds.
-# - A second llama-server for everyday use can live on another port; this one only needs its own.
+# - llama-server finds the tools only when it STARTS. Two guards make that safe (copy both scripts next to mcp.json and make them executable):
+#     wait-for-blender-minor.sh  ExecStartPre: waits until blender-minor LISTS ITS TOOLS (an open port is not enough);
+#     check-llama-tools.sh       ExecStartPost: fails if the server found NO tools, so systemd starts it again. Found by a real reboot:
+#                                on a loaded boot the discovery came back with 0 tools, the server looked healthy, and the model was useless.
 [Unit]
 Description=llama-server for Blender: small model + blender-minor tools
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=youruser
 Group=youruser
 WorkingDirectory=/opt/llama/blender-minor
-ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (exec 3<>/dev/tcp/BLENDER_MINOR_HOST/9192) 2>/dev/null && exit 0; sleep 2; done; echo "blender-minor did not answer in 2 min" >&2; exit 1'
+ExecStartPre=/opt/llama/blender-minor/wait-for-blender-minor.sh http://BLENDER_MINOR_HOST:9192/
 ExecStart=/opt/llama/bin/llama-server \
   -m /opt/llama/models/Qwen3-1.7B-Q8_0.gguf \
   --host 0.0.0.0 --port 9931 \
   --jinja -c 8192 -np 1 \
   --mcp-servers-config /opt/llama/blender-minor/mcp.json
-TimeoutStartSec=240
+ExecStartPost=/opt/llama/blender-minor/check-llama-tools.sh 9931
+TimeoutStartSec=300
 Restart=on-failure
 RestartSec=20
 

@@ -215,7 +215,10 @@ Há mais duas verificações em `eval/`:
 - `eval/evaluate_parts.py`: a mesma ideia para **peças**. Pede ao modelo caixas com furos, uma faixa levantada (`pad`) e um
   rebaixo (`pocket`); cada peça é lida de volta com `check_mesh` e o tamanho **e o volume** são comparados com os números feitos
   à mão. Os casos cujas ferramentas não estão na lista do modelo são pulados.
-  `python3 -I eval/evaluate_parts.py --url http://host:9931 --label meu-modelo`
+  `python3 -I eval/evaluate_parts.py --url http://host:9931 --label meu-modelo`. Com `--show` as peças ficam
+  na janela aberta do Blender, lado a lado numa fileira e cada uma com a sua cor, para você olhar. Toda rodada grava a sua evidência
+  (o que o modelo viu, cada chamada, cada medida) em `eval/results/` (fora do git); as rodadas até agora estão resumidas em
+  [`eval/PARTS-RESULTS.md`](eval/PARTS-RESULTS.md)
 - `eval/check_tools.py`: chama as ferramentas **sem modelo** e confere cada resultado com um volume calculado (pad, pocket em
   peça com degrau, mirror, join, subtract, intersect, array). Ele apaga tudo o que cria, então é seguro rodar num Blender com
   trabalho seu aberto. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`

@@ -233,7 +233,10 @@ Two more checks live in `eval/`:
 
 - `eval/evaluate_parts.py`: the same idea for **parts**. A model is asked for boxes with holes, a raised strip (`pad`) and a recess
   (`pocket`); each part is read back with `check_mesh` and its size **and volume** are compared with the hand-made numbers. Cases
-  whose tools are not in the model's list are skipped. `python3 -I eval/evaluate_parts.py --url http://host:9931 --label my-model`
+  whose tools are not in the model's list are skipped. `python3 -I eval/evaluate_parts.py --url http://host:9931 --label my-model`. Add `--show` to leave the
+  parts in the open Blender window, side by side in a row and each in its own colour, so you can look at them. Every run saves its
+  evidence (what the model saw, every call, every measurement) in `eval/results/` (not committed); the rounds so far are summed up in
+  [`eval/PARTS-RESULTS.md`](eval/PARTS-RESULTS.md)
 - `eval/check_tools.py`: calls the tools **without a model** and checks each result against a worked-out volume (pad, pocket on a
   stepped part, mirror, join, subtract, intersect, array). It removes everything it creates, so it is safe to run on a Blender
   with your own work open. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`

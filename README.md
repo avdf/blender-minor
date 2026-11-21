@@ -15,6 +15,9 @@ bevel_object(name="Cube", width=0.2, segments=3)
 
 > **Status: experimental.** Tested with Blender 5.3 on Linux. Read the [security notes](#security) before exposing it
 > to a network.
+>
+> **Old hardware?** The official Blender MCP add-on needs Blender 5.1+, and Blender 4.0+ needs OpenGL 4.3. A
+> patch that makes the add-on run on **Blender 3.6 LTS** (OpenGL 3.3) is in [`blender-3.6/`](blender-3.6/).
 
 ## Why it exists
 

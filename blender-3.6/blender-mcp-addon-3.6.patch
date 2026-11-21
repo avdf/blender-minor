@@ -1,0 +1,175 @@
+diff -ruN a/blender_mcp_addon/capture_output.py b/blender_mcp_addon/capture_output.py
+--- a/blender_mcp_addon/capture_output.py	2026-11-17 18:17:22.681831701 -0300
++++ b/blender_mcp_addon/capture_output.py	2026-11-21 01:30:37.627417106 -0300
+@@ -14,7 +14,12 @@
+ 
+ import io
+ import sys
+-from typing import IO, Self
++from typing import IO
++
++try:
++    from typing import Self
++except ImportError:  # Python < 3.11 (Blender 3.6 ships 3.10): only used as a return annotation.
++    Self = "Self"  # type: ignore[assignment]
+ 
+ 
+ class _Tee(io.TextIOBase):
+diff -ruN a/blender_mcp_addon/__init__.py b/blender_mcp_addon/__init__.py
+--- a/blender_mcp_addon/__init__.py	2026-11-17 18:17:22.681831701 -0300
++++ b/blender_mcp_addon/__init__.py	2026-11-21 01:28:56.530135489 -0300
+@@ -4,8 +4,25 @@
+ 
+ """
+ Blender add-on that provides an MCP socket bridge-server.
++
++NOTE: modified copy (21/11/2026) of the Blender Lab add-on, adapted to run on Blender 3.6 LTS,
++which has no extensions system (``blender_manifest.toml``) and lacks ``bpy.app.online_access``
++and ``bpy.utils.register_cli_command``. Changes: ``bl_info`` added, those two APIs are guarded.
++Original: https://projects.blender.org/lab/blender_mcp (GPL-3.0-or-later).
+ """
+ 
++# Legacy add-on metadata (Blender < 4.2 reads this instead of blender_manifest.toml).
++bl_info = {
++    "name": "MCP (Blender 3.6 port)",
++    "author": "Blender Authors (adapted)",
++    "version": (1, 0, 0),
++    "blender": (3, 6, 0),
++    "location": "Preferences > Add-ons",
++    "description": "MCP socket bridge-server (Blender Lab add-on adapted for Blender 3.6 LTS)",
++    "doc_url": "https://projects.blender.org/lab/blender_mcp",
++    "category": "System",
++}
++
+ __all__ = (
+     "register",
+     "unregister",
+@@ -77,7 +94,8 @@
+         """
+         Return True when online access is permitted, otherwise store an error and return False.
+         """
+-        if bpy.app.online_access:
++        # Blender 3.6 has no ``bpy.app.online_access`` (added in 4.2): treat as allowed.
++        if getattr(bpy.app, "online_access", True):
+             return True
+         cls.startup_info_set(_state_offline_error_message)
+         if bpy.app.background:
+@@ -320,7 +338,10 @@
+ def register() -> None:
+     for cls in _classes:
+         bpy.utils.register_class(cls)
+-    _cli_commands.append(bpy.utils.register_cli_command("blender_mcp", _cli_execute_handler))
++    # ``register_cli_command`` does not exist in Blender 3.6: the background server is started
++    # with a ``--python`` script instead (see serve_background.py).
++    if hasattr(bpy.utils, "register_cli_command"):
++        _cli_commands.append(bpy.utils.register_cli_command("blender_mcp", _cli_execute_handler))
+ 
+     # Defer auto-start so the server does not slow down Blender's startup.
+     if not bpy.app.background:
+@@ -339,8 +360,9 @@
+ def unregister() -> None:
+     from . import execute_interactive
+ 
+-    for cmd in _cli_commands:
+-        bpy.utils.unregister_cli_command(cmd)
++    if hasattr(bpy.utils, "unregister_cli_command"):
++        for cmd in _cli_commands:
++            bpy.utils.unregister_cli_command(cmd)
+     _cli_commands.clear()
+ 
+     if bpy.app.timers.is_registered(_autostart_timer):
+diff -ruN a/blender_mcp_addon/mcp_to_blender_server.py b/blender_mcp_addon/mcp_to_blender_server.py
+--- a/blender_mcp_addon/mcp_to_blender_server.py	2026-11-17 18:17:22.681831701 -0300
++++ b/blender_mcp_addon/mcp_to_blender_server.py	2026-11-21 01:34:23.010279075 -0300
+@@ -258,6 +258,15 @@
+                 response["stderr"] = captured.stderr
+             return _ExecResult(response)
+ 
++    # Modified for the 3.6 port: in background mode nothing redraws, so derived data such as
++    # ``Object.dimensions`` stays stale after e.g. changing ``Object.scale``. Refresh once after each
++    # execution so the *next* request (summary tools, another snippet) sees up-to-date values.
++    try:
++        import bpy  # pylint: disable=import-error,import-outside-toplevel
++        bpy.context.view_layer.update()
++    except Exception:  # pylint: disable=broad-exception-caught
++        pass
++
+     # Check for a deferred response (background job in progress).
+     check_fn_raw = namespace.get("check_is_finished")
+     if check_fn_raw is not None and callable(check_fn_raw):
+diff -ruN a/blender_mcp_addon/weak_sandbox.py b/blender_mcp_addon/weak_sandbox.py
+--- a/blender_mcp_addon/weak_sandbox.py	2026-11-17 18:17:22.681831701 -0300
++++ b/blender_mcp_addon/weak_sandbox.py	2026-11-21 01:36:37.031987074 -0300
+@@ -23,7 +23,12 @@
+ )
+ 
+ import sys
+-from typing import Any, Self
++from typing import Any
++
++try:
++    from typing import Self
++except ImportError:  # Python < 3.11 (Blender 3.6 ships 3.10): only used as a return annotation.
++    Self = "Self"  # type: ignore[assignment]
+ 
+ 
+ def _blocked_exit(*args: object, **kwargs: object) -> None:  # noqa: ARG001
+@@ -102,14 +107,33 @@
+     # Operator blocking
+ 
+     @staticmethod
+-    def ops_blocked_store() -> tuple[Any, Any]:
+-        """Replace ``bpy.ops._op_create_function`` with a filtered wrapper.
++    def ops_blocked_store() -> tuple[Any, str, Any]:
++        """Replace the ``bpy.ops`` operator lookup with a filtered wrapper.
++
++        The hook differs between Blender versions (both take ``(module, func)``):
+ 
+-        Returns ``(bpy_ops_module, original_function)`` for later restore.
++        - Blender 4.2+/5.x: ``bpy.ops._op_create_function``.
++        - Blender 3.x: ``bpy.ops._bpy_ops_submodule__getattr__`` (modified for the 3.6 port:
++          without this the block silently did nothing and e.g. ``wm.read_factory_settings``
++          disabled the add-on and stopped the server).
++
++        Returns ``(bpy_ops_module, attribute_name, original_function)`` for later restore.
+         """
+         import bpy.ops as _bpy_ops  # noqa: WPS433
+ 
+-        original = _bpy_ops._op_create_function
++        # NOTE: do NOT use ``hasattr(_bpy_ops, ...)``: the ``bpy.ops`` module defines a catch-all
++        # module ``__getattr__`` that returns a fake sub-module for any name, so ``hasattr`` is
++        # always true. Look at the module's real namespace instead.
++        _ns = vars(_bpy_ops)
++        if "_op_create_function" in _ns:
++            attr = "_op_create_function"
++        elif "_bpy_ops_submodule__getattr__" in _ns:
++            attr = "_bpy_ops_submodule__getattr__"
++        else:
++            # Fail loudly: a silent no-op here is what let blocked operators through on 3.6.
++            raise RuntimeError("weak sandbox: unsupported bpy.ops layout, cannot block operators")
++
++        original = getattr(_bpy_ops, attr)
+ 
+         def _filtered_op_create_function(module: str, func: str) -> Any:
+             key = "{:s}.{:s}".format(module, func)
+@@ -133,14 +157,14 @@
+                 return _blocked
+             return original(module, func)
+ 
+-        _bpy_ops._op_create_function = _filtered_op_create_function
+-        return (_bpy_ops, original)
++        setattr(_bpy_ops, attr, _filtered_op_create_function)
++        return (_bpy_ops, attr, original)
+ 
+     @staticmethod
+-    def ops_blocked_restore(saved: tuple[Any, Any]) -> None:
+-        """Restore the original ``_op_create_function``."""
+-        bpy_ops_module, original = saved
+-        bpy_ops_module._op_create_function = original
++    def ops_blocked_restore(saved: tuple[Any, str, Any]) -> None:
++        """Restore the original ``bpy.ops`` operator lookup."""
++        bpy_ops_module, attr, original = saved
++        setattr(bpy_ops_module, attr, original)
+ 
+     # -------------------------------------------------------------------------
+     # Context manager

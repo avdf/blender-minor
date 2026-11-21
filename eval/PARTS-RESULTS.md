@@ -18,7 +18,6 @@ The model ran on an old 2-core i5 with 5.6 GB of RAM at about 4 tokens/s, so a r
 | R6 | prompt gets a two-hole example; `create_box` refuses a name that already exists | bracket **passes** (8749.08) | one box and two `drill_hole` calls |
 | R7 | all five cases, final prompt | **5 / 5** (lenient) | **inflated.** The M3 case used `drill_hole` with 3 mm instead of `screw_hole` (19143.5 against 19127.4, a 0.08% difference, under the 1% tolerance) and the `pad` was raised on the **bottom** face after three failed calls (same volume and height as the top face) |
 | R8 | **strict**: tolerance 0.03%, `pad` z range checked, `axis`/`side`/`z1`/`z2` hidden from `pad` and `pocket` | **4 / 5** | two holes 8749.08, 5 mm hole 23882.38, `pad` 2320.0 on the top face (z -1..3) in one call, `pocket` 14800.0 are exact. The M3 case failed: the model created the box and **stopped**, no hole (19200.0) |
-
 | R9 | same as R8, run with `--show` (parts left in the Blender window in a row) | **4 / 5** | identical to R8 down to the last digit: at temperature 0 the model repeats its choices, so a rerun is a real check. Evidence JSON saved with the prompt hash, the tools the model saw and every call |
 
 ## What carries over to other small models

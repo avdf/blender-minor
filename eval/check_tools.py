@@ -60,6 +60,18 @@ def volume(name):
     return float(m.group(1)) if m else float("nan")
 
 
+def ray_hit(name, origin, direction):
+    """World point where a ray from `origin` along `direction` first meets the object (read through the Blender MCP), or None."""
+    code = ("import bpy\nfrom mathutils import Vector\no = bpy.data.objects['%s']\ninv = o.matrix_world.inverted()\n"
+            "ok, loc, n, i = o.ray_cast(inv @ Vector(%r), (inv.to_3x3() @ Vector(%r)).normalized())\n"
+            "w = o.matrix_world @ loc\nprint('HIT', w.x, w.y, w.z) if ok else print('HIT none')" % (name, tuple(origin), tuple(direction)))
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "execute_blender_code", "arguments": {"code": code}}}
+    req = urllib.request.Request(args.blender_mcp, data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
+    m = re.search(r"HIT (-?[0-9.e+-]+) (-?[0-9.e+-]+) (-?[0-9.e+-]+)", urllib.request.urlopen(req, timeout=60).read().decode().replace("\\n", " "))
+    return tuple(float(g) for g in m.groups()) if m else None
+
+
 def surface_z(name, x, y):
     """World z of the highest surface of the object at (x, y), by a ray cast from above (read through the Blender MCP)."""
     code = ("import bpy\nfrom mathutils import Vector\no = bpy.data.objects['%s']\ninv = o.matrix_world.inverted()\n"
@@ -235,6 +247,36 @@ try:
     print(f"{'PASS' if ok_axis else 'FAIL'}  the answers say which axis was drilled: {sx[40:100]} | {sy[40:100]}")
     expect_error("a side hole outside the part is refused", call("drill_hole_x", name="ct_foot", diameter=6, y=1900, z=10))
     expect_error("segments above the absolute cap (4096) is refused", call("drill_hole", name="ct_foot", diameter=2, x=0, y=1700, segments=5000))
+    # pad and pocket on the four SIDE faces of a part that stands up (right +X, left -X, front -Y, back +Y). The face is in the tool name;
+    # a ray from outside proves the material appeared on the RIGHT side, not only that the volume changed. Foot: 40 x 30 x 50 at y=1900.
+    make("ct_side4", width=40, depth=30, height=50, x=0, y=1900, z=0)
+    v = 40 * 30 * 50
+    call("pad_right", name="ct_side4", y1=1895, y2=1905, z1=-5, z2=5, height=3)
+    call("pad_left", name="ct_side4", y1=1895, y2=1905, z1=-5, z2=5, height=3)
+    call("pad_front", name="ct_side4", x1=-5, x2=5, z1=-5, z2=5, height=2)
+    call("pad_back", name="ct_side4", x1=-5, x2=5, z1=-5, z2=5, height=2)
+    check("four side pads add 300 + 300 + 200 + 200", volume("ct_side4"), v + 1000, tol=1e-6)
+    for label, origin, direction, axis, want in (("right (+X) pad top at x=23", (1000, 1900, 0), (-1, 0, 0), 0, 23.0),
+                                                 ("left (-X) pad top at x=-23", (-1000, 1900, 0), (1, 0, 0), 0, -23.0),
+                                                 ("front (-Y) pad top at y=1883", (0, 900, 0), (0, 1, 0), 1, 1883.0),
+                                                 ("back (+Y) pad top at y=1917", (0, 2900, 0), (0, -1, 0), 1, 1917.0)):
+        h = ray_hit("ct_side4", origin, direction)
+        check(label, h[axis] if h else float("nan"), want, tol=1e-4)
+    call("pocket_right", name="ct_side4", y1=1897, y2=1903, z1=-3, z2=3, depth=1)
+    call("pocket_left", name="ct_side4", y1=1897, y2=1903, z1=-3, z2=3, depth=1)
+    call("pocket_front", name="ct_side4", x1=-3, x2=3, z1=-3, z2=3, depth=1)
+    call("pocket_back", name="ct_side4", x1=-3, x2=3, z1=-3, z2=3, depth=1)
+    check("four side pockets of 6 x 6 x 1 remove 4 x 36", volume("ct_side4"), v + 1000 - 4 * 36, tol=1e-6)
+    for label, origin, direction, axis, want in (("right pocket floor at x=22", (1000, 1900, 0), (-1, 0, 0), 0, 22.0),
+                                                 ("left pocket floor at x=-22", (-1000, 1900, 0), (1, 0, 0), 0, -22.0),
+                                                 ("front pocket floor at y=1884", (0, 900, 0), (0, 1, 0), 1, 1884.0),
+                                                 ("back pocket floor at y=1916", (0, 2900, 0), (0, -1, 0), 1, 1916.0)):
+        h = ray_hit("ct_side4", origin, direction)
+        check(label, h[axis] if h else float("nan"), want, tol=1e-4)
+    keep = volume("ct_side4")
+    expect_error("pad_right outside the face is refused", call("pad_right", name="ct_side4", y1=5000, y2=5010, z1=-5, z2=5, height=3))
+    expect_error("pocket_front with a rectangle of no size is refused", call("pocket_front", name="ct_side4", x1=0, x2=0, z1=-3, z2=3, depth=1))
+    check("the refused side calls changed nothing", volume("ct_side4"), keep, tol=1e-9)
 finally:
     rd = rt.round_dir(here, "check-tools") if (args.trace or args.save_blend is not None) else None
     shots = rt.capture(args.blender_mcp, rd, grid=True) if rd else {}   # the visual proof, made by Blender, BEFORE the parts are deleted

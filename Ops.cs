@@ -122,6 +122,7 @@ public static class OpScripts
                          new OpProp("countersink_diameter", "number", "countersink diameter at the entry (90 degree cone)"),
                          new OpProp("segments", "number", $"sides of the hole, 8 to {MaxSegments}, default {DefaultSegments}")]).ToArray(),
             ["name", "diameter"]),
+        .. FaceOps(),
         // Side holes for a part that stands up (a foot, an ear). The axis is in the tool NAME, not in a parameter: a small model fills
         // an optional "axis" on impulse (and gets it wrong), but it does not pick the wrong tool name.
         new("drill_hole_x",
@@ -196,6 +197,14 @@ public static class OpScripts
         "delete_object" => WithObject(args, "name", (lit, a) => BuildDelete(lit)),
         "export_stl" => WithObject(args, "name", (lit, a) => BuildExport(lit, a)),
         "drill_hole" => WithObject(args, "name", (lit, a) => BuildDrill(lit, a, null)),
+        "pad_right" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "X", "+"), additive: true)),
+        "pocket_right" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "X", "+"), additive: false)),
+        "pad_left" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "X", "-"), additive: true)),
+        "pocket_left" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "X", "-"), additive: false)),
+        "pad_front" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "Y", "-"), additive: true)),
+        "pocket_front" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "Y", "-"), additive: false)),
+        "pad_back" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "Y", "+"), additive: true)),
+        "pocket_back" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "Y", "+"), additive: false)),
         "drill_hole_x" => WithObject(args, "name", (lit, a) => BuildDrill(lit, WithAxis(a, "X"), null)),
         "drill_hole_y" => WithObject(args, "name", (lit, a) => BuildDrill(lit, WithAxis(a, "Y"), null)),
         "screw_hole" => WithObject(args, "name", (lit, a) => BuildScrewHole(lit, a)),
@@ -205,6 +214,42 @@ public static class OpScripts
     };
 
     // ---- shared pieces -------------------------------------------------------------------------------------------
+
+    /// <summary>pad and pocket on the four SIDE faces of a part that stands up (a foot, an ear): right (+X), left (-X), front (-Y: the face
+    /// Blender's front view looks at) and back (+Y). The face is in the tool NAME: an optional "side" parameter was filled on impulse by a
+    /// small model, which raised a strip on the bottom face. The rectangle is given by the two coordinates that exist on that face.
+    /// The top face keeps the plain pad / pocket.</summary>
+    private static Op[] FaceOps()
+    {
+        var faces = new (string Word, string Sign, string A, string B)[]
+        {
+            ("right", "+X", "y", "z"), ("left", "-X", "y", "z"), ("front", "-Y", "x", "z"), ("back", "+Y", "x", "z"),
+        };
+        var list = new List<Op>();
+        foreach (var (word, sign, a, b) in faces)
+            foreach (bool pad in new[] { true, false })
+            {
+                string size = pad ? "height" : "depth";
+                string what = pad ? $"Add material on the {word.ToUpperInvariant()} face ({sign}) of an existing object, for a part that stands up: a rectangle on that face is raised by height."
+                                  : $"Cut a rectangular recess into the {word.ToUpperInvariant()} face ({sign}) of an existing object, for a part that stands up: a rectangle on that face is cut depth deep.";
+                list.Add(new Op($"{(pad ? "pad" : "pocket")}_{word}",
+                    $"{what} {a}1, {a}2 and {b}1, {b}2 are the corners of the rectangle on that face.",
+                    [NameProp, new($"{a}1", "number", "rectangle corner"), new($"{a}2", "number", "opposite corner"),
+                     new($"{b}1", "number", "rectangle corner"), new($"{b}2", "number", "opposite corner"),
+                     new(size, "number", pad ? "how far it rises from the face" : "how deep the recess is")],
+                    ["name", $"{a}1", $"{a}2", $"{b}1", $"{b}2", size]));
+            }
+        return [.. list];
+    }
+
+    /// <summary>The same arguments with the face chosen (axis and side), for the pad_* and pocket_* tools.</summary>
+    private static JsonElement WithFace(JsonElement args, string axis, string side)
+    {
+        var node = JsonObject.Create(args) ?? new JsonObject();
+        node["axis"] = axis;
+        node["side"] = side;
+        return JsonSerializer.SerializeToElement(node);
+    }
 
     /// <summary>The same arguments with "axis" set (drill_hole_x / drill_hole_y reuse the code of drill_hole).</summary>
     private static JsonElement WithAxis(JsonElement args, string axis)

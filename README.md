@@ -137,6 +137,15 @@ llama-server -m model.gguf --jinja --mcp-servers-config mcp.json
 
 Tool names are then prefixed with the server name (`blender-minor_create_sphere`).
 
+Small models do better with a **short tool list**, and `llama-server` has no allow list of its own, so the bridge has one:
+pass `--allow` with the tool names the model should see. Anything else is hidden from `tools/list` and refused on
+`tools/call` without ever reaching blender-minor:
+
+```json
+"args": ["-I", "/path/to/tools/mcp_stdio_bridge.py", "http://127.0.0.1:9192/",
+         "--allow", "create_box,drill_hole,screw_hole,list_objects"]
+```
+
 ### System prompt
 
 Small models still need a short instruction. See [`prompts/system.en.txt`](prompts/system.en.txt) (and

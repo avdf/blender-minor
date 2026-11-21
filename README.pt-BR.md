@@ -116,6 +116,15 @@ O `llama-server` só inicia servidores MCP como **processos** (stdio), não por 
 e rode `llama-server -m modelo.gguf --jinja --mcp-servers-config mcp.json`. Os nomes das ferramentas ganham o prefixo do
 servidor (`blender-minor_create_sphere`).
 
+Modelos pequenos se saem melhor com uma **lista curta de ferramentas**, e o `llama-server` não tem lista de permissão
+própria, então a ponte tem: passe `--allow` com os nomes das ferramentas que o modelo deve enxergar. O resto some do
+`tools/list` e é recusado no `tools/call` sem nunca chegar ao blender-minor:
+
+```json
+"args": ["-I", ".../mcp_stdio_bridge.py", "http://127.0.0.1:9192/",
+         "--allow", "create_box,drill_hole,screw_hole,list_objects"]
+```
+
 ### Prompt de sistema
 
 Modelos pequenos ainda precisam de uma instrução curta: veja [`prompts/system.pt-BR.txt`](prompts/system.pt-BR.txt) e

@@ -1,0 +1,42 @@
+== qwen3-1.7B-q8-f16-strict | system: system.parts.en.txt | think: False | tools: ['array_object', 'check_mesh', 'create_box', 'drill_hole', 'export_stl', 'list_objects', 'pad', 'pocket', 'screw_hole']
+
+FAIL  box + M3 hole  (317s)
+      request : Make a box named pt_base, 60 by 40 by 8, with an M3 hole at x=10, y=5
+      called  : create_box {"name": "pt_base", "width": 60, "depth": 40, "height": 8, "x": 0, "y": 0, "z": 0} -> OK pt_base (0.0, 0.0, 0.0)
+      expected: size=(60, 40, 8) volume~19127.4 (tolerance 0.03%) | measured: (19200.0, (60, 40, 8), True)
+      model   : The box named pt_base with dimensions 60x40x8 has been created at the origin (0.0, 0.0, 0.0).
+
+PASS  box + 5 mm hole  (81s)
+      request : Create a box named pt_plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.
+      called  : create_box {"name": "pt_plate", "width": 80, "depth": 50, "height": 6, "x": -20, "y": 10, "z": 0} -> OK pt_plate (-20.0, 10.0, 0.0)
+      called  : drill_hole {"name": "pt_plate", "diameter": 5, "x": -20, "y": 10} -> OK pt_plate hole diameter 5 at (-20, 10, *) axis Z through vertices=136 volume=2
+      expected: size=(80, 50, 6) volume~23882.2 (tolerance 0.03%) | measured: (23882.3794, (80, 50, 6), True)
+      model   : Box pt_plate created at (-20.0, 10.0, 0.0) with 5 mm hole at (-20, 10, 0.0).
+
+PASS  box + 2 holes  (114s)
+      request : Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.
+      called  : create_box {"name": "pt_bracket", "width": 30, "depth": 30, "height": 10, "x": 0, "y": 0, "z": 0} -> OK pt_bracket (0.0, 0.0, 0.0)
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": -8, "y": 0} -> OK pt_bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=138 volume=8
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": 8, "y": 0} -> OK pt_bracket hole diameter 4 at (8, 0, *) axis Z through vertices=268 volume=87
+      expected: size=(30, 30, 10) volume~8748.7 (tolerance 0.03%) | measured: (8749.0761, (30, 30, 10), True)
+      model   : The box pt_bracket has been created with two 4 mm holes at x=-8, y=0 and x=8, y=0, positioned at the center. The holes are drilled along the Z-axis th
+
+PASS  pad (raise a strip)  (79s)
+      request : Make a box named pt_strip, 100 by 10 by 2. Then raise a rectangle on its top face from x=-50 to x=-30 and from y=-4 to y=4, 2 high.
+      called  : create_box {"name": "pt_strip", "width": 100, "depth": 10, "height": 2, "x": 0, "y": 0, "z": 0} -> OK pt_strip (0.0, 0.0, 0.0)
+      called  : pad {"name": "pt_strip", "height": 2, "x1": -50, "x2": -30, "y1": -4, "y2": 4} -> OK pt_strip pad Z+ face at 1.0, height 2 vertices=18 volume=2320.0
+      expected: size=(100, 10, 4) volume~2320.0 (tolerance 0.03%) | measured: (2320.0, (100, 10, 4), True)
+      z range : expected (-1.0, 3.0) | measured (-1.0, 3.0)
+      model   : The box pt_strip has been created with a pad on its top face.
+
+PASS  pocket (cut a recess)  (84s)
+      request : Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.
+      called  : create_box {"name": "pt_block", "width": 40, "depth": 40, "height": 10, "x": 0, "y": 0, "z": 0} -> OK pt_block (0.0, 0.0, 0.0)
+      called  : pocket {"name": "pt_block", "depth": 3, "x1": -10, "x2": 10, "y1": -10, "y2": 10} -> OK pt_block pocket Z+ face at 5.0, depth 3 vertices=16 volume=14800.0
+      expected: size=(40, 40, 10) volume~14800.0 (tolerance 0.03%) | measured: (14800.0, (40, 40, 10), True)
+      z range : expected (-5.0, 5.0) | measured (-5.0, 5.0)
+      model   : The box pt_block has been created with a pocket cut in its top face as specified.
+
+RESULT qwen3-1.7B-q8-f16-strict: 4 passed, 1 failed, 0 skipped
+
+[exited with code 0]

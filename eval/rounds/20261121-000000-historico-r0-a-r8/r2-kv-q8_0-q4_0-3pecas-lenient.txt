@@ -1,0 +1,28 @@
+ferramentas vistas pelo modelo: ['list_objects', 'create_box', 'move_object', 'boolean_op', 'drill_hole', 'screw_hole', 'check_mesh', 'export_stl']
+
+### box + M3 hole  (364s)  PASSOU
+  pedido: Make a box named base, 60 by 40 by 8, with an M3 hole at x=10, y=5
+  chamou create_box {"name": "base", "width": 60, "depth": 40, "height": 8, "x": 0, "y": 0, "z": 0} -> OK base (0.0, 0.0, 0.0)
+  chamou screw_hole {"name": "base", "size": "M3", "x": 10, "y": 5} -> OK base hole diameter 3.4 at (10, 5, *) axis Z through [M3 clearance] 
+  esperado: dims=(60, 40, 8) volume~19127.4 | medido no Blender: (19127.483, (60, 40, 8), True)
+  resposta final do modelo: The box named "base" has been created with dimensions 60x40x8, and an M3 hole has been drilled at x=10, y=5 along the Z-axis.
+
+### box + 5 mm hole  (83s)  PASSOU
+  pedido: Create a box named plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.
+  chamou create_box {"name": "plate", "width": 80, "depth": 50, "height": 6, "x": -20, "y": 10, "z": 0} -> OK plate (-20.0, 10.0, 0.0)
+  chamou drill_hole {"name": "plate", "diameter": 5, "x": -20, "y": 10, "z": 0, "axis": "Z"} -> OK plate hole diameter 5 at (-20, 10, *) axis Z through vertices=136 v
+  esperado: dims=(80, 50, 6) volume~23882.2 | medido no Blender: (23882.3794, (80, 50, 6), True)
+  resposta final do modelo: The box named plate has been created and a 5 mm hole drilled along the Z-axis at x=-20, y=10.
+
+### box + 2 holes  (153s)  FALHOU
+  pedido: Make a box named bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.
+  chamou create_box {"name": "bracket", "width": 30, "depth": 30, "height": 10, "x": -8, "y": 0, "z": 0} -> OK bracket (-8.0, 0.0, 0.0)
+  chamou create_box {"name": "bracket", "width": 30, "depth": 30, "height": 10, "x": 8, "y": 0, "z": 0} -> OK bracket (8.0, 0.0, 0.0)
+  chamou drill_hole {"name": "bracket", "diameter": 4, "x": -8, "y": 0, "z": 0, "axis": "Z"} -> OK bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=54 vo
+  chamou drill_hole {"name": "bracket", "diameter": 4, "x": 8, "y": 0, "z": 0, "axis": "Z"} -> OK bracket hole diameter 4 at (8, 0, *) axis Z through vertices=182 vo
+  esperado: dims=(30, 30, 10) volume~8748.7 | medido no Blender: (8850.0384, (30, 30, 10), True)
+  resposta final do modelo: The box named "bracket" has two 4 mm holes drilled along the Z-axis at x=-8, y=0 and x=8, y=0.
+
+RESULTADO: 2/3 pecas corretas
+
+[exited with code 0]

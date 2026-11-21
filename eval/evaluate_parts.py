@@ -18,6 +18,16 @@ import argparse, hashlib, json, math, os, re, shutil, sys, time, urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # python -I does not add the script folder
 import evaluate_model as ev                                        # reuse its small HTTP helpers
+import roundtrace as rt                                            # the trace of the round (see roundtrace.py)
+
+_log = []
+_print = print
+
+
+def print(*a, **k):   # everything the test prints is also kept, to be saved as output.txt in the trace of the round
+    _print(*a, **k)
+    _log.append(" ".join(str(x) for x in a))
+
 
 here = os.path.dirname(os.path.abspath(__file__))
 ap = argparse.ArgumentParser()
@@ -34,16 +44,20 @@ ap.add_argument("--show", action="store_true",
                 help="keep the parts in the Blender scene, side by side in a row (each in its own colour), and frame the 3D view at "
                      "the end, so you can look at them in the open Blender window; the previous pt_* objects are removed first")
 ap.add_argument("--save-blend", nargs="*", default=None, metavar="DIR",
-                help="at the end, save a copy of the Blender scene as <evidence name>.blend next to the evidence JSON, and put both the "
-                     ".blend and the JSON in each DIR given (e.g. --save-blend ~/Desktop/tests); the open Blender window keeps its own "
-                     "file. Meant for --show")
+                help="also copy the folder of this round (eval/rounds/<date>-<label>/) into each DIR, e.g. a folder on the desktop")
+ap.add_argument("--why", default="", help="WHY this round is being run (the problem it attacks or the hypothesis it tests): goes into WHY.md")
+ap.add_argument("--changed", default="", help="what changed since the previous round (code, prompt, tools, model): goes into WHY.md")
+ap.add_argument("--compare", default=None, metavar="evidence.json",
+                help="the evidence.json of the round to compare with (default: the newest round already in eval/rounds/)")
 ap.add_argument("--spacing", type=float, default=130.0, help="distance between the parts of the row with --show (default 130)")
 a = ap.parse_args()
 P = a.tool_prefix
 
 
-def box_minus(w, d, h, holes=(), cuts=0.0, adds=0.0):
-    return w * d * h - sum(math.pi * (dia / 2) ** 2 * h for dia in holes) - cuts + adds
+def box_minus(w, d, h, holes=(), cuts=0.0, adds=0.0, lengths=None):
+    """Volume of the box minus round holes; lengths = how far each hole goes (default: the height, a hole along Z)."""
+    lengths = lengths or [h] * len(holes)
+    return w * d * h - sum(math.pi * (dia / 2) ** 2 * ln for dia, ln in zip(holes, lengths)) - cuts + adds
 
 
 # Volume tolerance: 0.03%. A 1% tolerance let a 3 mm hole pass for an M3 clearance hole (3.4 mm), a 0.08% difference.
@@ -67,6 +81,12 @@ CASES = [
     ("pocket (cut a recess)", {"create_box", "pocket"},
      "Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.",
      "pt_block", (40, 40, 10), 40 * 40 * 10 - 20 * 20 * 3, (-5.0, 5.0)),
+    ("side hole along X (a foot)", {"create_box", "drill_hole_x"},
+     "Make a box named pt_foot, 40 by 30 by 50. Drill a 6 mm hole through it, parallel to the X axis, at y=0 and z=10.",
+     "pt_foot", (40, 30, 50), box_minus(40, 30, 50, [6.0], lengths=[40]), None),
+    ("side hole along Y (an ear)", {"create_box", "drill_hole_y"},
+     "Make a box named pt_ear, 50 by 20 by 30. Drill a 5 mm hole through it, parallel to the Y axis, at x=10 and z=-5.",
+     "pt_ear", (50, 20, 30), box_minus(50, 20, 30, [5.0], lengths=[20]), None),
 ]
 
 
@@ -208,31 +228,35 @@ if a.show:
     print("The parts are left in the Blender scene, in a row (--show).")
 print(f"RESULT {a.label}: {passed} passed, {failed} failed, {skipped} skipped")
 
-# Evidence of the round, like evaluate_model.py (eval/results/ is not committed): what the model saw, every call, every measurement.
-os.makedirs(os.path.join(here, "results"), exist_ok=True)
-out = os.path.join(here, "results", f"parts-{a.label}-{time.strftime('%Y%m%d-%H%M%S')}.json")
-json.dump({"label": a.label, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "llama_server": a.url, "tolerance": TOL,
-           "system_prompt": os.path.basename(a.system) if system else None,
-           "system_prompt_sha256": hashlib.sha256(system.encode()).hexdigest() if system else None,
-           "think": a.think, "show": a.show,
-           "tools_seen_by_the_model": {d["function"]["name"].replace(P, ""): list(d["function"]["parameters"].get("properties", {})) for d in defs},
-           "passed": passed, "failed": failed, "skipped": skipped, "seconds": round(time.time() - t_start), "rows": rows},
-          open(out, "w"), ensure_ascii=False, indent=1)
-print("evidence:", out)
-
-if a.save_blend is not None:   # a copy of the scene, named like the evidence, so a round can be opened and looked at later
-    name = os.path.basename(out)[:-5] + ".blend"
-    for d in a.save_blend:   # the evidence JSON goes with the .blend, so each folder is complete by itself
-        try:
-            os.makedirs(os.path.expanduser(d), exist_ok=True)
-            shutil.copy2(out, os.path.join(os.path.expanduser(d), os.path.basename(out)))
-        except Exception as e:
-            print("evidence: could not copy to", d, "->", e)
-    for path in [os.path.join(here, "results", name)] + [os.path.join(os.path.expanduser(d), name) for d in a.save_blend]:
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            run_code("import bpy\nbpy.ops.wm.save_as_mainfile(filepath=%r, copy=True)\nprint('SAVED')" % path)
-            print("blend   :", path, f"({os.path.getsize(path) // 1024} KB)" if os.path.exists(path) else "(NOT FOUND after saving)")
-        except Exception as e:
-            print("blend   : could not save to", path, "->", e)
+# The trace of the round, committed to git (see roundtrace.py): why it was run, what changed, the result, the code under test, every call
+# and measurement, and the visual proof made by Blender itself (scene.blend, window.png, viewport.png).
+import glob
+previous = a.compare
+if previous is None:
+    found = sorted(glob.glob(os.path.join(here, "rounds", "*", "evidence.json")))
+    previous = next((f for f in reversed(found) if '"rows"' in open(f, encoding="utf-8").read(200000)), None)
+rd = rt.round_dir(here, a.label)
+shots = rt.capture(a.blender_mcp, rd) if a.show else {}
+props = rt.http_json(a.url + "/props") or {}
+evidence = {
+    "label": a.label, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "why": a.why, "changed": a.changed,
+    "compare_to": os.path.relpath(previous, here) if previous else None,
+    "git": rt.git_state(os.path.dirname(here)), "host": rt.host_info(), "blender_version": rt.blender_version(a.blender_mcp),
+    "llama": {"url": a.url, "model_path": props.get("model_path"), "build_info": props.get("build_info"),
+              "total_slots": props.get("total_slots"), "n_ctx": (props.get("default_generation_settings") or {}).get("n_ctx")},
+    "tolerance": TOL, "think": a.think, "show": a.show,
+    "system_prompt": os.path.basename(a.system) if system else None,
+    "system_prompt_sha256": hashlib.sha256(system.encode()).hexdigest() if system else None,
+    "tools_seen_by_the_model": {d["function"]["name"].replace(P, ""): d["function"] for d in defs},
+    "passed": passed, "failed": failed, "skipped": skipped, "seconds": round(time.time() - t_start), "rows": rows,
+}
+rt.write_round(rd, label=a.label, why=a.why, changed=a.changed, result_line=f"{passed} passed, {failed} failed, {skipped} skipped",
+               evidence=evidence, output_lines=_log, prompt=system, compare_to=previous, rows=rows, files=shots)
+print("trace   :", rd)
+for d in (a.save_blend or []):
+    try:
+        shutil.copytree(rd, os.path.join(os.path.expanduser(d), os.path.basename(rd)), dirs_exist_ok=True)
+        print("copy    :", os.path.join(os.path.expanduser(d), os.path.basename(rd)))
+    except Exception as e:
+        print("copy    : could not copy to", d, "->", e)
 sys.exit(1 if failed else 0)

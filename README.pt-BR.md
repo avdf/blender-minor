@@ -58,6 +58,7 @@ feminino, como `roxa`) ou `#RRGGBB`.
 | `intersect` | `target`, `other` (obrigatórios) | fica só com o que os dois têm em comum; **transacional** |
 | `boolean_op` | `target`, `cutter` (obrigatórios), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT de dois objetos, com a operação como parâmetro; **transacional** (veja abaixo). Para modelos pequenos prefira `join` / `subtract` / `intersect`: quem carrega a operação é a *ferramenta*, então o modelo nunca precisa escolher um valor |
 | `drill_hole` | `name`, `diameter` (obrigatórios), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | furo redondo de diâmetro exato, passante ou cego, nos eixos X, Y ou Z, com **rebaixo** opcional (para a cabeça do parafuso) ou **escareado** de 90° |
+| `drill_hole_x`, `drill_hole_y` | `name`, `diameter` e as duas coordenadas da face: `y`, `z` (X) ou `x`, `z` (Y) (todos obrigatórios) | um furo redondo de lado a lado, **paralelo a X ou a Y**, para peça de pé (um pé, uma orelha). O eixo está no nome da ferramenta, então o modelo pequeno nunca precisa escolhê-lo |
 | `screw_hole` | `name` (obrigatório), `size` (M2 a M8), `kind`, `x`, `y`, `z`, `axis`, `side`, `depth` | furo para um parafuso padrão, de uma tabela: `clearance` (passante), `counterbore` (rebaixo), `countersunk` (escareado) ou `insert` (furo cego para inserto de rosca a quente) |
 | `set_color` | `name`, `color` (obrigatórios), `roughness`, `specular` | troca o material de um objeto existente |
 | `repair_mesh` | `name` (obrigatório), `tolerance` | junta vértices duplicados, remove pedaços soltos, corrige normais, tapa buracos; mostra antes/depois; desfaz se piorar |
@@ -113,6 +114,8 @@ Variáveis de ambiente:
 | `BLENDER_MINOR_HOST` | `127.0.0.1` | endereço de escuta (veja [segurança](#segurança)) |
 | `BLENDER_MCP_URL` | `http://127.0.0.1:9191/` | o servidor MCP do Blender |
 | `BLENDER_MINOR_DRYRUN` | desligado | `1` devolve o script gerado em vez de enviar (testa sem tocar no Blender) |
+| `BLENDER_MINOR_SEGMENTS` | `64` | lados do cortador que faz um furo redondo (padrão). Um furo é um polígono: com 64 lados ele fica 0,16% menor que o círculo de verdade em área (0,006 mm num raio de 5 mm), com 256 fica 0,01%; o custo é um boolean mais lento e um STL maior |
+| `BLENDER_MINOR_MAX_SEGMENTS` | `256` | o maior `segments` que uma chamada pode pedir (no máximo 4096). Uma máquina forte pode subir |
 | `BLENDER_MINOR_TEMPLATES` | `~/.config/blender-minor/templates` | pasta de override dos templates |
 | `BLENDER_BIN` | | executável do Blender usado pelo `--selftest` |
 
@@ -138,7 +141,7 @@ para não mandar. `--hide ferramenta.parametro,...` tira esses parâmetros do `t
 o modelo não consegue escolhê-los. Para o trabalho de peças:
 
 ```json
-"--hide", "drill_hole.axis,drill_hole.side,screw_hole.axis,screw_hole.side,pad.axis,pad.side,pad.z1,pad.z2,pocket.axis,pocket.side,pocket.z1,pocket.z2"
+"--hide", "create_box.x,create_box.y,create_box.z,drill_hole.axis,drill_hole.side,screw_hole.axis,screw_hole.side,pad.axis,pad.side,pad.z1,pad.z2,pocket.axis,pocket.side,pocket.z1,pocket.z2"
 ```
 
 O que o modelo não enxerga ele não erra, e ainda gasta menos tokens de prompt.
@@ -159,7 +162,7 @@ Para **peças com medida exata e furos** (impressão 3D, laser) existe um prompt
 desse trabalho: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt) (em inglês). Ele combina com a lista
 `--allow` da [ponte stdio](#usando-com-o-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `pad`, `pocket`,
 `array_object`, `list_objects`, `check_mesh`, `export_stl`), então o modelo enxerga a mesma lista curta que o prompt
-descreve. São nove ferramentas de propósito: cada ferramenta custa tokens de prompt (uns 2300 para oito ferramentas mais o
+descreve. São onze ferramentas de propósito (as nove de antes mais `drill_hole_x` e `drill_hole_y`, para peça de pé): cada ferramenta custa tokens de prompt (uns 2300 para oito ferramentas mais o
 prompt, minutos numa CPU velha), e uma ferramenta que o prompt não descreve só confunde um modelo pequeno. Acrescente
 `join`, `subtract`, `mirror_object` ou `move_object` na lista `--allow` **e** no prompt quando o trabalho precisar.
 
@@ -216,12 +219,21 @@ Há mais duas verificações em `eval/`:
   rebaixo (`pocket`); cada peça é lida de volta com `check_mesh` e o tamanho **e o volume** são comparados com os números feitos
   à mão. Os casos cujas ferramentas não estão na lista do modelo são pulados.
   `python3 -I eval/evaluate_parts.py --url http://host:9931 --label meu-modelo`. Com `--show` as peças ficam
-  na janela aberta do Blender, lado a lado numa fileira e cada uma com a sua cor, para você olhar. Toda rodada grava a sua evidência
-  (o que o modelo viu, cada chamada, cada medida) em `eval/results/` (fora do git); as rodadas até agora estão resumidas em
-  [`eval/PARTS-RESULTS.md`](eval/PARTS-RESULTS.md)
+  na janela aberta do Blender, lado a lado numa fileira e cada uma com a sua cor, para você olhar. Toda rodada grava o seu **rastro** em `eval/rounds/<data>-<rótulo>/`, que É versionado (veja abaixo); as rodadas até agora estão resumidas em
+  [`eval/PARTS-RESULTS.md`](eval/PARTS-RESULTS.md). Passe `--why` (o problema que a rodada ataca) e `--changed` (o que mudou desde a anterior), e ela se compara sozinha com a rodada anterior, caso a caso
 - `eval/check_tools.py`: chama as ferramentas **sem modelo** e confere cada resultado com um volume calculado (pad, pocket em
   peça com degrau, mirror, join, subtract, intersect, array). Ele apaga tudo o que cria, então é seguro rodar num Blender com
-  trabalho seu aberto. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`
+  trabalho seu aberto (com `--keep` as peças ficam na cena). Cobre também os limites: faces no mesmo plano (furo exatamente tangente à lateral, corte exatamente da profundidade da peça, caixas que só se encostam), onde o boolean pode falhar no Blender. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`. Com `--trace` ele grava o rastro também
+
+**O rastro de uma rodada** (`eval/roundtrace.py`) é uma pasta por execução, versionada no git, para o log dizer o que se tentou, por quê, e se a correção funcionou:
+
+| Arquivo | O que é |
+|---|---|
+| `WHY.md` | por que a rodada foi feita, o que mudou, o código testado (commit do git e um hash do que não foi commitado), o resultado e a comparação com a rodada anterior |
+| `output.txt`, `evidence.json`, `prompt.txt` | o que o teste imprimiu; cada chamada e medida, a máquina, a versão do Blender e as ferramentas que o modelo viu; o prompt do sistema inteiro |
+| `scene.blend`, `window.png`, `viewport.png` | **a prova visual**, feita pelo próprio Blender (sem depender da área de trabalho): a cena, a janela inteira e a vista 3D com zoom em todas as peças, como aparece na tela |
+
+Endereços da rede local e diretórios pessoais são trocados antes de gravar. `eval/results/` fica fora do git (rascunho).
 
 ### Rodar o modelo como serviço
 

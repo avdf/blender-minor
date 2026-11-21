@@ -1,0 +1,13 @@
+== qwen3-1.7B-q8-f16-example2holes | system: system.parts.en.txt | think: False | tools: ['array_object', 'check_mesh', 'create_box', 'drill_hole', 'export_stl', 'list_objects', 'pad', 'pocket', 'screw_hole']
+
+PASS  box + 2 holes  (340s)
+      request : Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.
+      called  : create_box {"name": "pt_bracket", "width": 30, "depth": 30, "height": 10, "x": 0, "y": 0, "z": 0} -> OK pt_bracket (0.0, 0.0, 0.0)
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": -8, "y": 0} -> OK pt_bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=138 volume=8
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": 8, "y": 0} -> OK pt_bracket hole diameter 4 at (8, 0, *) axis Z through vertices=268 volume=87
+      expected: size=(30, 30, 10) volume~8748.7 | measured: (8749.0761, (30, 30, 10), True)
+      model   : The box pt_bracket has been created with two 4 mm holes at x=-8, y=0 and x=8, y=0, positioned at the center (0.0, 0.0, 0.0). The holes are drilled alo
+
+RESULT qwen3-1.7B-q8-f16-example2holes: 1 passed, 0 failed, 0 skipped
+
+[exited with code 0]

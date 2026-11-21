@@ -1,0 +1,67 @@
+##### 1) FERRAMENTAS DIRETAS (sem modelo) #####
+PASS  plate: got 2000.000, expected 2000.000
+PASS  a box named like an existing object is refused (no silent .001): ERROR: an object named ct_plate already exists. Pick another name, or change that object (drill_hole, pad, poc
+PASS  the refused box changed nothing: got 2000.000, expected 2000.000
+PASS  pad 20x8x2: got 2320.000, expected 2320.000
+PASS  pocket 20x6x1 (surface at z=2): got 2200.000, expected 2200.000
+PASS  pocket 10x4x1 inside the raised strip (surface at z=4): got 2160.000, expected 2160.000
+PASS  pad outside the face is refused: ERROR: the rectangle does not touch the Z+ face: there is no surface of the object under it
+PASS  the refused pad changed nothing: got 2160.000, expected 2160.000
+PASS  pad on the X- face (10x10x2): got 16200.000, expected 16200.000
+PASS  mirror_object (two halves): got 800.000, expected 800.000
+PASS  join (5x10x10 overlap): got 1500.000, expected 1500.000
+PASS  subtract (10x10x5 removed): got 1500.000, expected 1500.000
+PASS  intersect (5x10x10 in common): got 500.000, expected 500.000
+PASS  array_object 5x2 (ten parts): got 500.000, expected 500.000
+PASS  array size X = 5*5 + 4*2: got 33.000, expected 33.000
+PASS  array size Y = 2*5 + 1*2: got 12.000, expected 12.000
+PASS  array with both counts 1 is refused: ERROR count_x and count_y are both 1: there is nothing to repeat. Pass count_x and/or count_y.
+
+0 failure(s)
+
+##### 2) CINCO CASOS COM O MODELO (peças na janela) #####
+== qwen3-1.7B-q8-f16-regra5-systemd | system: system.parts.en.txt | think: False | tools: ['array_object', 'check_mesh', 'create_box', 'drill_hole', 'export_stl', 'list_objects', 'pad', 'pocket', 'screw_hole']
+
+PASS  box + M3 hole  (346s)
+      request : Make a box named pt_base, 60 by 40 by 8, with an M3 hole at x=10, y=5
+      called  : create_box {"name": "pt_base", "width": 60, "depth": 40, "height": 8, "x": 0, "y": 0, "z": 0} -> OK pt_base (0.0, 0.0, 0.0)
+      called  : screw_hole {"name": "pt_base", "size": "M3", "x": 10, "y": 5} -> OK pt_base hole diameter 3.4 at (10, 5, *) axis Z through [M3 clearance] vertice
+      expected: size=(60, 40, 8) volume~19127.4 (tolerance 0.03%) | measured: (19127.483, (60, 40, 8), True)
+      model   : OK pt_base created with M3 hole at (10, 5, *) axis Z through.
+
+PASS  box + 5 mm hole  (76s)
+      request : Create a box named pt_plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.
+      called  : create_box {"name": "pt_plate", "width": 80, "depth": 50, "height": 6, "x": -20, "y": 10, "z": 0} -> OK pt_plate (-20.0, 10.0, 0.0)
+      called  : drill_hole {"name": "pt_plate", "diameter": 5, "x": -20, "y": 10} -> OK pt_plate hole diameter 5 at (-20, 10, *) axis Z through vertices=136 volume=2
+      expected: size=(80, 50, 6) volume~23882.2 (tolerance 0.03%) | measured: (23882.3794, (80, 50, 6), True)
+      model   : The box pt_plate has been created with the specified dimensions and a 5 mm hole at the given position.
+
+PASS  box + 2 holes  (110s)
+      request : Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.
+      called  : create_box {"name": "pt_bracket", "width": 30, "depth": 30, "height": 10, "x": 0, "y": 0, "z": 0} -> OK pt_bracket (0.0, 0.0, 0.0)
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": -8, "y": 0} -> OK pt_bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=138 volume=8
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": 8, "y": 0} -> OK pt_bracket hole diameter 4 at (8, 0, *) axis Z through vertices=268 volume=87
+      expected: size=(30, 30, 10) volume~8748.7 (tolerance 0.03%) | measured: (8749.0761, (30, 30, 10), True)
+      model   : The box pt_bracket with two 4 mm holes at x=-8, y=0 and x=8, y=0 has been created and the holes are drilled.
+
+PASS  pad (raise a strip)  (81s)
+      request : Make a box named pt_strip, 100 by 10 by 2. Then raise a rectangle on its top face from x=-50 to x=-30 and from y=-4 to y=4, 2 high.
+      called  : create_box {"name": "pt_strip", "width": 100, "depth": 10, "height": 2, "x": 0, "y": 0, "z": 0} -> OK pt_strip (0.0, 0.0, 0.0)
+      called  : pad {"name": "pt_strip", "height": 2, "x1": -50, "x2": -30, "y1": -4, "y2": 4} -> OK pt_strip pad Z+ face at 1.0, height 2 vertices=18 volume=2320.0
+      expected: size=(100, 10, 4) volume~2320.0 (tolerance 0.03%) | measured: (2320.0, (100, 10, 4), True)
+      z range : expected (-1.0, 3.0) | measured (-1.0, 3.0)
+      model   : The box pt_strip has been created and a pad has been added to its top face.
+
+PASS  pocket (cut a recess)  (84s)
+      request : Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.
+      called  : create_box {"name": "pt_block", "width": 40, "depth": 40, "height": 10, "x": 0, "y": 0, "z": 0} -> OK pt_block (0.0, 0.0, 0.0)
+      called  : pocket {"name": "pt_block", "depth": 3, "x1": -10, "x2": 10, "y1": -10, "y2": 10} -> OK pt_block pocket Z+ face at 5.0, depth 3 vertices=16 volume=14800.0
+      expected: size=(40, 40, 10) volume~14800.0 (tolerance 0.03%) | measured: (14800.0, (40, 40, 10), True)
+      z range : expected (-5.0, 5.0) | measured (-5.0, 5.0)
+      model   : The box pt_block has been created with a pocket cut in its top face as specified.
+
+The parts are left in the Blender scene, in a row (--show).
+RESULT qwen3-1.7B-q8-f16-regra5-systemd: 5 passed, 0 failed, 0 skipped
+evidence: /projetos/projetos/blender-minor-public/eval/results/parts-qwen3-1.7B-q8-f16-regra5-systemd-20261121-141317.json
+
+[exited with code 0]

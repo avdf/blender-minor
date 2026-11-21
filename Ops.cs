@@ -17,6 +17,17 @@ public static class OpScripts
 {
     public const double CoordLimit = ShapeScripts.CoordLimit;
 
+    /// <summary>Sides of the cylinder that cuts a hole. Each side is a flat face, so a round hole is a polygon: with 64 sides the hole
+    /// is 0.16% short of the true circle in area (0.006 mm at a 5 mm radius), with 256 it is 0.01%. The default (64) is right for a
+    /// small model and an old CPU. A strong machine can raise it: BLENDER_MINOR_SEGMENTS is the default and BLENDER_MINOR_MAX_SEGMENTS
+    /// is the highest value a call may ask for (default 256, at most 4096). The "segments" argument of a call still decides, up to that cap.</summary>
+    private static readonly int MaxSegments = EnvInt("BLENDER_MINOR_MAX_SEGMENTS", 256, 8, 4096);
+    private static readonly int DefaultSegments = Math.Min(EnvInt("BLENDER_MINOR_SEGMENTS", 64, 8, 4096), MaxSegments);
+
+    private static int EnvInt(string name, int fallback, int lo, int hi)
+        => int.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v)
+            ? Math.Clamp(v, lo, hi) : fallback;
+
     private static readonly OpProp NameProp = new("name", "string", "exact object name, as listed by list_objects");
     private static readonly OpProp X = new("x", "number", "X position");
     private static readonly OpProp Y = new("y", "number", "Y position");
@@ -109,8 +120,18 @@ public static class OpScripts
                          new OpProp("counterbore_diameter", "number", "recess diameter at the entry"),
                          new OpProp("counterbore_depth", "number", "recess depth"),
                          new OpProp("countersink_diameter", "number", "countersink diameter at the entry (90 degree cone)"),
-                         new OpProp("segments", "number", "sides of the hole, 8 to 256, default 64")]).ToArray(),
+                         new OpProp("segments", "number", $"sides of the hole, 8 to {MaxSegments}, default {DefaultSegments}")]).ToArray(),
             ["name", "diameter"]),
+        // Side holes for a part that stands up (a foot, an ear). The axis is in the tool NAME, not in a parameter: a small model fills
+        // an optional "axis" on impulse (and gets it wrong), but it does not pick the wrong tool name.
+        new("drill_hole_x",
+            "Drill a round hole all the way through an existing object, parallel to the X axis (from the side, for a part that stands up). y and z say where the hole is on that face.",
+            [NameProp, new("diameter", "number", "hole diameter"), Y, Z],
+            ["name", "diameter", "y", "z"]),
+        new("drill_hole_y",
+            "Drill a round hole all the way through an existing object, parallel to the Y axis (from the front, for a part that stands up). x and z say where the hole is on that face.",
+            [NameProp, new("diameter", "number", "hole diameter"), X, Z],
+            ["name", "diameter", "x", "z"]),
         new("screw_hole",
             "Drill a hole for a standard screw size by name, using a table of typical dimensions. kind: clearance (screw passes through), counterbore (plus a recess for a socket head), countersunk (plus a cone for a flat head) or insert (blind hole for a heat-set insert; needs the entry point z along the axis).",
             new OpProp[] { NameProp, new("size", "string", "M2, M2.5, M3, M4, M5, M6 or M8 (default M3)"),
@@ -175,6 +196,8 @@ public static class OpScripts
         "delete_object" => WithObject(args, "name", (lit, a) => BuildDelete(lit)),
         "export_stl" => WithObject(args, "name", (lit, a) => BuildExport(lit, a)),
         "drill_hole" => WithObject(args, "name", (lit, a) => BuildDrill(lit, a, null)),
+        "drill_hole_x" => WithObject(args, "name", (lit, a) => BuildDrill(lit, WithAxis(a, "X"), null)),
+        "drill_hole_y" => WithObject(args, "name", (lit, a) => BuildDrill(lit, WithAxis(a, "Y"), null)),
         "screw_hole" => WithObject(args, "name", (lit, a) => BuildScrewHole(lit, a)),
         "boolean_op" => BuildBoolean(args),
         "set_units" => BuildUnits(args),
@@ -182,6 +205,14 @@ public static class OpScripts
     };
 
     // ---- shared pieces -------------------------------------------------------------------------------------------
+
+    /// <summary>The same arguments with "axis" set (drill_hole_x / drill_hole_y reuse the code of drill_hole).</summary>
+    private static JsonElement WithAxis(JsonElement args, string axis)
+    {
+        var node = JsonObject.Create(args) ?? new JsonObject();
+        node["axis"] = axis;
+        return JsonSerializer.SerializeToElement(node);
+    }
 
     /// <summary>Validates an object name and hands it over as an escaped string literal. The name ALWAYS enters the script as an
     /// escaped string literal (JSON is valid Python string syntax), never as code.</summary>
@@ -533,7 +564,7 @@ public static class OpScripts
         sb.Append("    else:\n");
         sb.Append("        bad, vol, n = bm_check(o)\n");
         // A tool that changed nothing must not say OK: a small model would believe the part was modified.
-        sb.Append("        if abs(vol - vol0) < 1e-9:\n");
+        sb.Append("        if abs(vol - vol0) < max(1e-6 * abs(vol0), 1e-9):\n");
         sb.Append($"            print(\"ERROR: nothing was {(additive ? "added" : "cut")}: the rectangle does not overlap the part at that face (the surface there is at \" + str(round(plane, 4)) + \")\")\n");
         sb.Append("        else:\n");
         sb.Append($"            note = \" (note: the rectangle goes beyond the face)\" if outside else \"\"\n");
@@ -761,7 +792,7 @@ public static class OpScripts
         if (!ShapeScripts.Has(args, "diameter")) return (null, "Argument 'diameter' is required.");
         var (dia, ed) = ShapeScripts.Number(args, "diameter", 0, 0.01, 10000); if (ed is not null) return (null, ed);
         var (clr, ecl) = ShapeScripts.Number(args, "clearance", 0, 0, 10); if (ecl is not null) return (null, ecl);
-        var (segf, esg) = ShapeScripts.Number(args, "segments", 64, 8, 256); if (esg is not null) return (null, esg);
+        var (segf, esg) = ShapeScripts.Number(args, "segments", DefaultSegments, 8, MaxSegments); if (esg is not null) return (null, esg);
         int seg = (int)Math.Round(segf);
         string axis = (ShapeScripts.Text(args, "axis") ?? "Z").ToUpperInvariant();
         if (axis is not ("X" or "Y" or "Z")) return (null, $"Invalid axis '{axis}'. Use X, Y or Z.");
@@ -845,13 +876,21 @@ public static class OpScripts
             sb.Append($"    e = hi if d > 0 else lo\n    start = hi + {N(margin)}\n    end = lo - {N(margin)}\n");
         else
             sb.Append($"    e = pos[ai]\n    start = e + d * {N(margin)}\n    end = e - d * {N(depth)}\n");
+        sb.Append("    bad0, vol0, n0 = bm_check(t)\n");   // volume before: a hole that removed nothing must not say OK
         sb.Append("    center = list(pos)\n");
         sb.Append("    center[ai] = (start + end) / 2\n");
-        sb.Append($"    bpy.ops.mesh.primitive_cylinder_add(vertices={seg}, radius={N(holeR)}, depth=abs(start - end), location=tuple(center), rotation={rot})\n");
-        sb.Append("    cutter = bpy.context.active_object\n");
-        sb.Append("    cutter.name = 'BM_hole_cutter'\n");
-        sb.Append("    err = bm_boolean(t, cutter, 'DIFFERENCE')\n");
-        sb.Append("    bpy.data.objects.remove(cutter, do_unlink=True)\n");
+        // A hole exactly tangent to a face puts a vertex of the cutter in the plane of that face, and the boolean can give a bad
+        // mesh (non-manifold). The boolean is transactional (a bad result leaves the part as it was), so try again with the cutter
+        // 0.02% wider, then 0.02% narrower: a sliver of 0.06 mm or less, far below what a printer can make, and the mesh stays closed.
+        sb.Append("    nudge = ''\n");
+        sb.Append("    for k in (1.0, 1.0002, 0.9998):\n");
+        sb.Append($"        bpy.ops.mesh.primitive_cylinder_add(vertices={seg}, radius={N(holeR)} * k, depth=abs(start - end), location=tuple(center), rotation={rot})\n");
+        sb.Append("        cutter = bpy.context.active_object\n");
+        sb.Append("        cutter.name = 'BM_hole_cutter'\n");
+        sb.Append("        err = bm_boolean(t, cutter, 'DIFFERENCE')\n");
+        sb.Append("        bpy.data.objects.remove(cutter, do_unlink=True)\n");
+        sb.Append("        if k != 1.0 and not err:\n            nudge = ' (the hole touches a face exactly: the cutter was ' + ('widened' if k > 1 else 'narrowed') + ' by 0.02% so that the mesh stays closed)'\n");
+        sb.Append("        if not (err and 'bad mesh' in err):\n            break\n");
         string recess = "";
         if (hasCb || hasCs)
         {
@@ -884,7 +923,21 @@ public static class OpScripts
         sb.Append("        bad, vol, n = bm_check(t)\n");
         string kind = through ? "through" : $"depth {N(depth)}";
         string tag = label is null ? "" : $" [{label}]";
-        sb.Append($"        print(\"OK \" + t.name + \" hole diameter {N(dia + clr)} at {where} axis {axis} {kind}{recess}{tag} vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)))");
+        // A hole that touches nothing changed nothing: say so, and say where the part is.
+        sb.Append("        if abs(vol - vol0) < max(1e-6 * abs(vol0), 1e-9):\n");
+        sb.Append("            span = ', '.join('XYZ'[i] + ' ' + str(round(min(c[i] for c in corners), 2)) + ' to ' + str(round(max(c[i] for c in corners), 2)) for i in range(3))\n");
+        sb.Append($"            print(\"ERROR: nothing was cut: the hole at {where} does not touch the part. The part spans \" + span + \". Give x and y inside it.\")\n");
+        sb.Append("        else:\n");
+        // A hole that only grazes the part: warn (not an error: a hole through an existing pocket legitimately removes less).
+        if (!hasCb && !hasCs)
+        {
+            string length = through ? "(hi - lo)" : N(depth);
+            sb.Append($"            full = 3.14159265 * {N(holeR)} ** 2 * {length}\n");
+            sb.Append("            note = (\" (warning: the hole only partly overlaps the part: it removed %.1f of the %.1f mm3 a full hole removes; check x and y)\" % (vol0 - vol, full)) if (vol0 - vol) < 0.5 * full else \"\"\n");
+        }
+        else
+            sb.Append("            note = \"\"\n");
+        sb.Append($"            print(\"OK \" + t.name + \" hole diameter {N(dia + clr)} at {where} axis {axis} {kind}{recess}{tag} vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)) + nudge + note)");
         return (sb.ToString(), null);
     }
 

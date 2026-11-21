@@ -1,0 +1,15 @@
+antes: 2 objects | Light LIGHT (4.08, 1.01, 5.9) | Camera CAMERA (7.36, -6.93, 4.96)
+depois: 2 objects | Light LIGHT (4.08, 1.01, 5.9) | Camera CAMERA (7.36, -6.93, 4.96)
+== qwen3-1.7B-q8-f16-axisrule | system: system.parts.en.txt | think: False | tools: ['array_object', 'check_mesh', 'create_box', 'drill_hole', 'export_stl', 'list_objects', 'pad', 'pocket', 'screw_hole']
+
+FAIL  box + 2 holes  (371s)
+      request : Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.
+      called  : create_box {"name": "pt_bracket", "width": 30, "depth": 30, "height": 10, "x": 0, "y": 0, "z": 0} -> OK pt_bracket (0.0, 0.0, 0.0)
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": -8, "y": 0, "z": 0, "axis": "X"} -> OK pt_bracket hole diameter 4 at (*, 0, 0) axis X through vertices=136 volume=86
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": 8, "y": 0, "z": 0, "axis": "X"} -> OK pt_bracket hole diameter 4 at (*, 0, 0) axis X through vertices=264 volume=86
+      expected: size=(30, 30, 10) volume~8748.7 | measured: (8623.6142, (30, 30, 10), True)
+      model   : The box pt_bracket has two 4 mm holes drilled along the X-axis at x=-8, y=0 and x=8, y=0.
+
+RESULT qwen3-1.7B-q8-f16-axisrule: 0 passed, 1 failed, 0 skipped
+
+[exited with code 0]

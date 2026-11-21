@@ -1,0 +1,329 @@
+{
+ "label": "qwen3-0.6B-q8-f16",
+ "when": "2026-11-21 14:20:06",
+ "llama_server": "http://<lan-ip>:9932",
+ "tolerance": 0.0003,
+ "system_prompt": "system.parts.en.txt",
+ "system_prompt_sha256": "309901bffc5a9f505a0963f5d767044df92b690a1d431700209a2c71770e5140",
+ "think": false,
+ "show": true,
+ "tools_seen_by_the_model": {
+  "list_objects": [],
+  "create_box": [
+   "name",
+   "width",
+   "depth",
+   "height",
+   "x",
+   "y",
+   "z",
+   "color"
+  ],
+  "array_object": [
+   "name",
+   "count_x",
+   "count_y",
+   "gap",
+   "apply"
+  ],
+  "pad": [
+   "name",
+   "x1",
+   "x2",
+   "y1",
+   "y2",
+   "height"
+  ],
+  "pocket": [
+   "name",
+   "x1",
+   "x2",
+   "y1",
+   "y2",
+   "depth"
+  ],
+  "drill_hole": [
+   "name",
+   "diameter",
+   "x",
+   "y",
+   "z",
+   "depth",
+   "clearance",
+   "counterbore_diameter",
+   "counterbore_depth",
+   "countersink_diameter",
+   "segments"
+  ],
+  "screw_hole": [
+   "name",
+   "size",
+   "kind",
+   "x",
+   "y",
+   "z",
+   "depth"
+  ],
+  "check_mesh": [
+   "name"
+  ],
+  "export_stl": [
+   "name",
+   "filename"
+  ]
+ },
+ "passed": 0,
+ "failed": 5,
+ "skipped": 0,
+ "seconds": 324,
+ "rows": [
+  {
+   "case": "box + M3 hole",
+   "pass": false,
+   "seconds": 138.8,
+   "request": "Make a box named pt_base, 60 by 40 by 8, with an M3 hole at x=10, y=5",
+   "object": "pt_base",
+   "expected": {
+    "size": [
+     60,
+     40,
+     8
+    ],
+    "volume": 19127.366,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 19200.0,
+    "size": [
+     60,
+     40,
+     8
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_base",
+      "width": 60,
+      "depth": 40,
+      "height": 8,
+      "x": 10,
+      "y": 5
+     },
+     "answer": "OK pt_base (10.0, 5.0, 0.0)"
+    }
+   ],
+   "model_final": "OK pt_base."
+  },
+  {
+   "case": "box + 5 mm hole",
+   "pass": false,
+   "seconds": 33.7,
+   "request": "Create a box named pt_plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.",
+   "object": "pt_plate",
+   "expected": {
+    "size": [
+     80,
+     50,
+     6
+    ],
+    "volume": 23882.19,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 24000.0,
+    "size": [
+     80,
+     50,
+     6
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_plate",
+      "width": 80,
+      "depth": 50,
+      "height": 6,
+      "x": -20,
+      "y": 10
+     },
+     "answer": "OK pt_plate (-20.0, 10.0, 0.0)"
+    }
+   ],
+   "model_final": "OK pt_plate (-20.0, 10.0, 0.0)"
+  },
+  {
+   "case": "box + 2 holes",
+   "pass": false,
+   "seconds": 75.2,
+   "request": "Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.",
+   "object": "pt_bracket",
+   "expected": {
+    "size": [
+     30,
+     30,
+     10
+    ],
+    "volume": 8748.673,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 8850.0384,
+    "size": [
+     30,
+     30,
+     10
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_bracket",
+      "width": 30,
+      "depth": 30,
+      "height": 10,
+      "x": -8,
+      "y": 0
+     },
+     "answer": "OK pt_bracket (-8.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_bracket",
+      "diameter": 4,
+      "x": -8,
+      "y": 0
+     },
+     "answer": "OK pt_bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=136 volume=8874.5381"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_bracket",
+      "diameter": 4,
+      "x": 8,
+      "y": 0
+     },
+     "answer": "OK pt_bracket hole diameter 4 at (8, 0, *) axis Z through vertices=182 volume=8850.0384"
+    }
+   ],
+   "model_final": "OK pt_bracket (-8.0, 0.0, 0.0) and pt_bracket (8.0, 0.0, 0.0)"
+  },
+  {
+   "case": "pad (raise a strip)",
+   "pass": false,
+   "seconds": 33.7,
+   "request": "Make a box named pt_strip, 100 by 10 by 2. Then raise a rectangle on its top face from x=-50 to x=-30 and from y=-4 to y=4, 2 high.",
+   "object": "pt_strip",
+   "expected": {
+    "size": [
+     100,
+     10,
+     4
+    ],
+    "volume": 2320,
+    "z_range": [
+     -1.0,
+     3.0
+    ]
+   },
+   "measured": {
+    "volume": 2000.0,
+    "size": [
+     100,
+     10,
+     2
+    ],
+    "manifold": true,
+    "z_range": [
+     3.0,
+     5.0
+    ]
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_strip",
+      "width": 100,
+      "depth": 10,
+      "height": 2,
+      "x": -50,
+      "y": -4,
+      "z": 4
+     },
+     "answer": "OK pt_strip (-50.0, -4.0, 4.0)"
+    }
+   ],
+   "model_final": "OK pt_strip."
+  },
+  {
+   "case": "pocket (cut a recess)",
+   "pass": false,
+   "seconds": 34.3,
+   "request": "Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.",
+   "object": "pt_block",
+   "expected": {
+    "size": [
+     40,
+     40,
+     10
+    ],
+    "volume": 14800,
+    "z_range": [
+     -5.0,
+     5.0
+    ]
+   },
+   "measured": {
+    "volume": 16000.0,
+    "size": [
+     40,
+     40,
+     10
+    ],
+    "manifold": true,
+    "z_range": [
+     5.0,
+     15.0
+    ]
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_block",
+      "width": 40,
+      "depth": 40,
+      "height": 10,
+      "x": -10,
+      "y": -10,
+      "z": 10
+     },
+     "answer": "OK pt_block (-10.0, -10.0, 10.0)"
+    }
+   ],
+   "model_final": "OK."
+  }
+ ],
+ "note": "Recorded before eval/roundtrace.py existed: this folder has no git state, host or Blender version. The code that produced it is the working tree on top of the commit named below. Base commit: 84bec38.",
+ "why": "Is a smaller and faster model good enough for the parts job? Speed with failures is not a choice, so the strict check decides.",
+ "changed": "Only the model: Qwen3-0.6B Q8_0 instead of the 1.7B. Same prompt, same tools, same check.",
+ "files": {
+  "blend": {
+   "sha256": "a8241f3fe268c9107b631e1381092ec984fd9c1259f518c2d5e24dba874b3330",
+   "bytes": 947776
+  }
+ }
+}

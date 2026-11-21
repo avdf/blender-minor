@@ -58,6 +58,7 @@ as `roxa`) or `#RRGGBB`.
 | `intersect` | `target`, `other` (required) | keeps only what the two have in common; **transactional** |
 | `boolean_op` | `target`, `cutter` (required), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT of two objects, with the operation as a parameter; **transactional** (see below). For small models prefer `join` / `subtract` / `intersect`: the *tool* carries the operation, so the model never has to choose a value |
 | `drill_hole` | `name`, `diameter` (required), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | a round hole of an exact diameter, through or blind, along X, Y or Z, with an optional counterbore (recess for a screw head) or 90 degree countersink |
+| `drill_hole_x`, `drill_hole_y` | `name`, `diameter`, and the two coordinates on the face: `y`, `z` (X) or `x`, `z` (Y) (all required) | a round hole all the way through, **parallel to X or to Y**, for a part that stands up (a foot, an ear). The axis is in the tool name, so a small model never has to choose it |
 | `screw_hole` | `name` (required), `size` (M2 to M8), `kind`, `x`, `y`, `z`, `axis`, `side`, `depth` | a hole for a standard screw from a table: `clearance`, `counterbore`, `countersunk` or `insert` (blind hole for a heat-set insert) |
 | `set_color` | `name`, `color` (required), `roughness`, `specular` | changes the material of an existing object |
 | `repair_mesh` | `name` (required), `tolerance` | merges duplicate vertices, removes loose parts, fixes normals, fills holes; reports before/after; undone if it makes things worse |
@@ -112,6 +113,8 @@ Environment variables:
 | `BLENDER_MINOR_HOST` | `127.0.0.1` | bind address (see [security](#security)) |
 | `BLENDER_MCP_URL` | `http://127.0.0.1:9191/` | the Blender MCP server |
 | `BLENDER_MINOR_DRYRUN` | unset | `1` returns the generated script instead of sending it (test without touching Blender) |
+| `BLENDER_MINOR_SEGMENTS` | `64` | default sides of the cutter that makes a round hole. A hole is a polygon: with 64 sides it is 0.16% short of the true circle in area (0.006 mm at a 5 mm radius), with 256 it is 0.01%; the cost is a slower boolean and a bigger STL |
+| `BLENDER_MINOR_MAX_SEGMENTS` | `256` | the highest `segments` a call may ask for (at most 4096). A strong machine can raise it |
 | `BLENDER_MINOR_TEMPLATES` | `~/.config/blender-minor/templates` | template override folder |
 | `BLENDER_BIN` | | Blender executable used by `--selftest` |
 
@@ -159,7 +162,7 @@ to. `--hide tool.param,...` removes them from `tools/list` and drops them from a
 parts job:
 
 ```json
-"--hide", "drill_hole.axis,drill_hole.side,screw_hole.axis,screw_hole.side,pad.axis,pad.side,pad.z1,pad.z2,pocket.axis,pocket.side,pocket.z1,pocket.z2"
+"--hide", "create_box.x,create_box.y,create_box.z,drill_hole.axis,drill_hole.side,screw_hole.axis,screw_hole.side,pad.axis,pad.side,pad.z1,pad.z2,pocket.axis,pocket.side,pocket.z1,pocket.z2"
 ```
 
 What the model cannot see it cannot get wrong, and it costs fewer prompt tokens too.
@@ -178,7 +181,7 @@ without an `OK`, always pass `color` when one is mentioned, copy object names ex
 For **parts with exact sizes and holes** (3D printing, laser) there is a shorter prompt that lists only the tools that
 job needs: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt). It matches the `--allow` list of the
 [stdio bridge](#using-it-from-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `pad`, `pocket`, `array_object`,
-`list_objects`, `check_mesh`, `export_stl`), so the model sees the same short tool list that the prompt describes. Nine
+`list_objects`, `check_mesh`, `export_stl`; plus `drill_hole_x` and `drill_hole_y` for parts that stand up), so the model sees the same short tool list that the prompt describes. Eleven
 tools on purpose: every tool costs prompt tokens (about 2300 for eight tools plus the prompt, minutes on an old CPU), and a
 tool the prompt does not describe only confuses a small model. Add `join`, `subtract`, `mirror_object` or `move_object` to
 both the `--allow` list and the prompt when a job needs them.
@@ -234,12 +237,21 @@ Two more checks live in `eval/`:
 - `eval/evaluate_parts.py`: the same idea for **parts**. A model is asked for boxes with holes, a raised strip (`pad`) and a recess
   (`pocket`); each part is read back with `check_mesh` and its size **and volume** are compared with the hand-made numbers. Cases
   whose tools are not in the model's list are skipped. `python3 -I eval/evaluate_parts.py --url http://host:9931 --label my-model`. Add `--show` to leave the
-  parts in the open Blender window, side by side in a row and each in its own colour, so you can look at them. Every run saves its
-  evidence (what the model saw, every call, every measurement) in `eval/results/` (not committed); the rounds so far are summed up in
-  [`eval/PARTS-RESULTS.md`](eval/PARTS-RESULTS.md)
+  parts in the open Blender window, side by side in a row and each in its own colour, so you can look at them. Every run writes its **trace** into `eval/rounds/<date>-<label>/`, which IS committed (see below); the rounds so far are summed up in
+  [`eval/PARTS-RESULTS.md`](eval/PARTS-RESULTS.md). Give `--why` (the problem the round attacks) and `--changed` (what changed since the previous round), and it compares itself with the previous round case by case
 - `eval/check_tools.py`: calls the tools **without a model** and checks each result against a worked-out volume (pad, pocket on a
   stepped part, mirror, join, subtract, intersect, array). It removes everything it creates, so it is safe to run on a Blender
-  with your own work open. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`
+  with your own work open (add `--keep` to leave the parts in the scene). It also covers the limits: faces in the same plane (a hole exactly tangent to a side, a cut exactly as deep as the part, boxes that only touch), where a boolean can fail in Blender. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`. Add `--trace` to write its trace too
+
+**The trace of a round** (`eval/roundtrace.py`) is one folder per run, committed to git, so the log says what was tried, why, and whether the fix worked:
+
+| File | What it is |
+|---|---|
+| `WHY.md` | why the round was run, what changed, the code under test (git commit and a hash of anything uncommitted), the result and a comparison with the previous round |
+| `output.txt`, `evidence.json`, `prompt.txt` | what the test printed; every call and measurement, the host, the Blender version and the tools the model saw; the system prompt in full |
+| `scene.blend`, `window.png`, `viewport.png` | **the visual proof**, made by Blender itself (no dependency on the desktop): the scene, the whole window, and the 3D view zoomed to all the parts, as it appears on screen |
+
+LAN addresses and home directories are replaced before anything is written. `eval/results/` stays out of git (scratch).
 
 ### Run the model as a service
 

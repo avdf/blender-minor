@@ -1,0 +1,255 @@
+{
+ "label": "check-tools",
+ "when": "2026-11-21 14:53:19",
+ "why": "Close three defects found while testing: (1) a hole in the void answered OK (the volume comparison was too tight for floating point), (2) a hole exactly tangent to a face gave a bad mesh, (3) there were no side holes (parallel to X and to Y) for parts that stand up.",
+ "changed": "drill_hole refuses a hole that does not touch the part (relative threshold 1e-6) and warns about one that only grazes it; the cutter is nudged by 0.02% when the boolean gives a bad mesh; new tools drill_hole_x and drill_hole_y; segments configurable by environment (default 64, cap 256); new tests: pad and pocket land on the real surface, rectangles with no size, and 8 limit cases with coplanar faces.",
+ "git": {
+  "commit": "96b702eeb201ba6de8b436efecffcf4322706185",
+  "subject": "PARTS-RESULTS.md: round R11, Qwen3-0.6B fails all five cases of the strict check",
+  "uncommitted_files": [
+   "M Ops.cs",
+   " M SelfTest.cs",
+   " M eval/check_tools.py",
+   " M eval/evaluate_parts.py",
+   " M prompts/system.parts.en.txt",
+   "?? eval/__pycache__/",
+   "?? eval/rounds/",
+   "?? eval/roundtrace.py"
+  ],
+  "uncommitted_diff_sha256": "4fcfbd5d5e80a9a049e421142ef430e30df47f60d1d6bc03a27d5f05086088e2"
+ },
+ "host": {
+  "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+  "cpu": "Intel(R) Core(TM) i5-3317U CPU @ 1.70GHz",
+  "mem_total": "7570776 kB",
+  "python": "3.13.5"
+ },
+ "blender_version": "3.6.23",
+ "passed": 52,
+ "failed": 0,
+ "seconds": 29,
+ "checks": [
+  {
+   "check": "plate: got 2000.000, expected 2000.000",
+   "pass": true
+  },
+  {
+   "check": "a box named like an existing object is refused (no silent .001): ERROR: an object named ct_plate already exists. Pick another name, or change that object (drill_hole, pad, poc",
+   "pass": true
+  },
+  {
+   "check": "the refused box changed nothing: got 2000.000, expected 2000.000",
+   "pass": true
+  },
+  {
+   "check": "pad 20x8x2: got 2320.000, expected 2320.000",
+   "pass": true
+  },
+  {
+   "check": "pocket 20x6x1 (surface at z=2): got 2200.000, expected 2200.000",
+   "pass": true
+  },
+  {
+   "check": "pocket 10x4x1 inside the raised strip (surface at z=4): got 2160.000, expected 2160.000",
+   "pass": true
+  },
+  {
+   "check": "pad outside the face is refused: ERROR: the rectangle does not touch the Z+ face: there is no surface of the object under it",
+   "pass": true
+  },
+  {
+   "check": "the refused pad changed nothing: got 2160.000, expected 2160.000",
+   "pass": true
+  },
+  {
+   "check": "pad on the X- face (10x10x2): got 16200.000, expected 16200.000",
+   "pass": true
+  },
+  {
+   "check": "mirror_object (two halves): got 800.000, expected 800.000",
+   "pass": true
+  },
+  {
+   "check": "join (5x10x10 overlap): got 1500.000, expected 1500.000",
+   "pass": true
+  },
+  {
+   "check": "subtract (10x10x5 removed): got 1500.000, expected 1500.000",
+   "pass": true
+  },
+  {
+   "check": "intersect (5x10x10 in common): got 500.000, expected 500.000",
+   "pass": true
+  },
+  {
+   "check": "array_object 5x2 (ten parts): got 500.000, expected 500.000",
+   "pass": true
+  },
+  {
+   "check": "array size X = 5*5 + 4*2: got 33.000, expected 33.000",
+   "pass": true
+  },
+  {
+   "check": "array size Y = 2*5 + 1*2: got 12.000, expected 12.000",
+   "pass": true
+  },
+  {
+   "check": "array with both counts 1 is refused: ERROR count_x and count_y are both 1: there is nothing to repeat. Pass count_x and/or count_y.",
+   "pass": true
+  },
+  {
+   "check": "drill_hole 4 mm through the middle (box at x=700): got 1937.269, expected 1937.168",
+   "pass": true
+  },
+  {
+   "check": "a whole hole carries no warning: OK ct_drill hole diameter 4 at (700, 0, *) axis Z through vertices=136 volume=1937.269",
+   "pass": true
+  },
+  {
+   "check": "a hole in the void is refused (no OK for nothing): ERROR: nothing was cut: the hole at (800, 0, *) does not touch the part. The part spans X 690.0 to 710.0, Y -1",
+   "pass": true
+  },
+  {
+   "check": "the refused hole changed nothing: got 1937.269, expected 1937.269",
+   "pass": true
+  },
+  {
+   "check": "a hole that only grazes the part warns: OK ct_drill hole diameter 4 at (711, 0, *) axis Z through vertices=182 volume=1925.0192 (warning: the hole only partly overlaps the part: it removed 1",
+   "pass": true
+  },
+  {
+   "check": "pocket 10x10x0.5 removes only that much: got 15950.000, expected 15950.000",
+   "pass": true
+  },
+  {
+   "check": "the pocket floor is at z=4.5: cut from the top, not in the middle: got 4.500, expected 4.500",
+   "pass": true
+  },
+  {
+   "check": "pad 10x10x0.5 adds only that much: got 16000.000, expected 16000.000",
+   "pass": true
+  },
+  {
+   "check": "the pad top is at z=5.5: raised from the top, not in the middle: got 5.500, expected 5.500",
+   "pass": true
+  },
+  {
+   "check": "pocket with a rectangle of no size (z1 = z2 = 0) is refused: ERROR The rectangle has no size: y1 and y2, and z1 and z2, must be different.",
+   "pass": true
+  },
+  {
+   "check": "pad with a rectangle of no size (z1 = z2 = 0) is refused: ERROR The rectangle has no size: y1 and y2, and z1 and z2, must be different.",
+   "pass": true
+  },
+  {
+   "check": "pocket outside the face is refused: ERROR: the rectangle does not touch the Z+ face: there is no surface of the object under it",
+   "pass": true
+  },
+  {
+   "check": "the refused calls changed nothing: got 16000.000, expected 16000.000",
+   "pass": true
+  },
+  {
+   "check": "limit: pocket as wide as the whole top face (rectangle = face): got 11200.000, expected 11200.000",
+   "pass": true
+  },
+  {
+   "check": "limit: pocket as wide as the whole top face (rectangle = face): the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "limit: pad as wide as the whole top face (rectangle = face): got 19200.000, expected 19200.000",
+   "pass": true
+  },
+  {
+   "check": "limit: pad as wide as the whole top face (rectangle = face): the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "limit: pocket exactly as deep as the part (cutter ends on the bottom face): got 15000.000, expected 15000.000",
+   "pass": true
+  },
+  {
+   "check": "limit: pocket exactly as deep as the part (cutter ends on the bottom face): the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "limit: blind hole exactly as deep as the part: got 15215.863, expected 15214.602",
+   "pass": true
+  },
+  {
+   "check": "limit: blind hole exactly as deep as the part: the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "limit: hole exactly tangent to the side face (x=15, radius 5, face at x=20): got 15215.549, expected 15214.602",
+   "pass": true
+  },
+  {
+   "check": "limit: hole exactly tangent to the side face (x=15, radius 5, face at x=20): the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "the answer says the hole touched a face and the cutter was nudged: s=138 volume=15215.5494 (the hole touches a face exactly: the cutter was widened by 0.02% so that the mesh stays closed)",
+   "pass": true
+  },
+  {
+   "check": "limit: join of two boxes that only touch (zero overlap): got 16000.000, expected 16000.000",
+   "pass": true
+  },
+  {
+   "check": "limit: join of two boxes that only touch (zero overlap): the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "limit: subtract a cutter whose top is flush with the part's top: got 15500.000, expected 15500.000",
+   "pass": true
+  },
+  {
+   "check": "limit: subtract a cutter whose top is flush with the part's top: the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "limit: intersect where the inner box shares the top and the bottom plane: got 4000.000, expected 4000.000",
+   "pass": true
+  },
+  {
+   "check": "limit: intersect where the inner box shares the top and the bottom plane: the mesh is closed (manifold)",
+   "pass": true
+  },
+  {
+   "check": "drill_hole_x 6 mm (through 40 along X): got 58870.843, expected 58869.027",
+   "pass": true
+  },
+  {
+   "check": "drill_hole_y 6 mm (through 30 along Y): got 58023.974, expected 58020.797",
+   "pass": true
+  },
+  {
+   "check": "the answers say which axis was drilled: 10) axis X through vertices=136 volume=58870.8426 | ) axis Y through vertices=266 volume=58023.9745",
+   "pass": true
+  },
+  {
+   "check": "a side hole outside the part is refused: ERROR: nothing was cut: the hole at (*, 1900, 10) does not touch the part. The part spans X -20.0 to 20.0, Y 1",
+   "pass": true
+  },
+  {
+   "check": "segments above the absolute cap (4096) is refused: ERROR Argument 'segments' must be between 8 and 256.",
+   "pass": true
+  }
+ ],
+ "files": {
+  "viewport": {
+   "sha256": "aa2bd7b3998e754c9d25dbbc8ac51a15ec3a35fcb761197890508d68e7924136",
+   "bytes": 1045682
+  },
+  "window": {
+   "sha256": "e47f89793cc500fafcc8807769dbc5481df595fa99e4baa2e9168432df67468d",
+   "bytes": 1178367
+  },
+  "blend": {
+   "sha256": "6b4d6deb230153062bf3e202e24034fd2333ade42c60a6e2edd832929db2cf9a",
+   "bytes": 1172672
+  }
+ }
+}

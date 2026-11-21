@@ -1,0 +1,54 @@
+PASS  plate: got 2000.000, expected 2000.000
+PASS  a box named like an existing object is refused (no silent .001): ERROR: an object named ct_plate already exists. Pick another name, or change that object (drill_hole, pad, poc
+PASS  the refused box changed nothing: got 2000.000, expected 2000.000
+PASS  pad 20x8x2: got 2320.000, expected 2320.000
+PASS  pocket 20x6x1 (surface at z=2): got 2200.000, expected 2200.000
+PASS  pocket 10x4x1 inside the raised strip (surface at z=4): got 2160.000, expected 2160.000
+PASS  pad outside the face is refused: ERROR: the rectangle does not touch the Z+ face: there is no surface of the object under it
+PASS  the refused pad changed nothing: got 2160.000, expected 2160.000
+PASS  pad on the X- face (10x10x2): got 16200.000, expected 16200.000
+PASS  mirror_object (two halves): got 800.000, expected 800.000
+PASS  join (5x10x10 overlap): got 1500.000, expected 1500.000
+PASS  subtract (10x10x5 removed): got 1500.000, expected 1500.000
+PASS  intersect (5x10x10 in common): got 500.000, expected 500.000
+PASS  array_object 5x2 (ten parts): got 500.000, expected 500.000
+PASS  array size X = 5*5 + 4*2: got 33.000, expected 33.000
+PASS  array size Y = 2*5 + 1*2: got 12.000, expected 12.000
+PASS  array with both counts 1 is refused: ERROR count_x and count_y are both 1: there is nothing to repeat. Pass count_x and/or count_y.
+PASS  drill_hole 4 mm through the middle (box at x=700): got 1937.269, expected 1937.168
+PASS  a whole hole carries no warning: OK ct_drill hole diameter 4 at (700, 0, *) axis Z through vertices=136 volume=1937.269
+PASS  a hole in the void is refused (no OK for nothing): ERROR: nothing was cut: the hole at (800, 0, *) does not touch the part. The part spans X 690.0 to 710.0, Y -1
+PASS  the refused hole changed nothing: got 1937.269, expected 1937.269
+PASS  a hole that only grazes the part warns: OK ct_drill hole diameter 4 at (711, 0, *) axis Z through vertices=182 volume=1925.0192 (warning: the hole only partly overlaps the part: it removed 1
+PASS  pocket 10x10x0.5 removes only that much: got 15950.000, expected 15950.000
+PASS  the pocket floor is at z=4.5: cut from the top, not in the middle: got 4.500, expected 4.500
+PASS  pad 10x10x0.5 adds only that much: got 16000.000, expected 16000.000
+PASS  the pad top is at z=5.5: raised from the top, not in the middle: got 5.500, expected 5.500
+PASS  pocket with a rectangle of no size (z1 = z2 = 0) is refused: ERROR The rectangle has no size: y1 and y2, and z1 and z2, must be different.
+PASS  pad with a rectangle of no size (z1 = z2 = 0) is refused: ERROR The rectangle has no size: y1 and y2, and z1 and z2, must be different.
+PASS  pocket outside the face is refused: ERROR: the rectangle does not touch the Z+ face: there is no surface of the object under it
+PASS  the refused calls changed nothing: got 16000.000, expected 16000.000
+PASS  limit: pocket as wide as the whole top face (rectangle = face): got 11200.000, expected 11200.000
+PASS  limit: pocket as wide as the whole top face (rectangle = face): the mesh is closed (manifold)
+PASS  limit: pad as wide as the whole top face (rectangle = face): got 19200.000, expected 19200.000
+PASS  limit: pad as wide as the whole top face (rectangle = face): the mesh is closed (manifold)
+PASS  limit: pocket exactly as deep as the part (cutter ends on the bottom face): got 15000.000, expected 15000.000
+PASS  limit: pocket exactly as deep as the part (cutter ends on the bottom face): the mesh is closed (manifold)
+PASS  limit: blind hole exactly as deep as the part: got 15215.863, expected 15214.602
+PASS  limit: blind hole exactly as deep as the part: the mesh is closed (manifold)
+PASS  limit: hole exactly tangent to the side face (x=15, radius 5, face at x=20): got 15215.549, expected 15214.602
+PASS  limit: hole exactly tangent to the side face (x=15, radius 5, face at x=20): the mesh is closed (manifold)
+PASS  the answer says the hole touched a face and the cutter was nudged: s=138 volume=15215.5494 (the hole touches a face exactly: the cutter was widened by 0.02% so that the mesh stays closed)
+PASS  limit: join of two boxes that only touch (zero overlap): got 16000.000, expected 16000.000
+PASS  limit: join of two boxes that only touch (zero overlap): the mesh is closed (manifold)
+PASS  limit: subtract a cutter whose top is flush with the part's top: got 15500.000, expected 15500.000
+PASS  limit: subtract a cutter whose top is flush with the part's top: the mesh is closed (manifold)
+PASS  limit: intersect where the inner box shares the top and the bottom plane: got 4000.000, expected 4000.000
+PASS  limit: intersect where the inner box shares the top and the bottom plane: the mesh is closed (manifold)
+PASS  drill_hole_x 6 mm (through 40 along X): got 58870.843, expected 58869.027
+PASS  drill_hole_y 6 mm (through 30 along Y): got 58023.974, expected 58020.797
+PASS  the answers say which axis was drilled: 10) axis X through vertices=136 volume=58870.8426 | ) axis Y through vertices=266 volume=58023.9745
+PASS  a side hole outside the part is refused: ERROR: nothing was cut: the hole at (*, 1900, 10) does not touch the part. The part spans X -20.0 to 20.0, Y 1
+PASS  segments above the absolute cap (4096) is refused: ERROR Argument 'segments' must be between 8 and 256.
+
+0 failure(s)

@@ -1,0 +1,56 @@
+== qwen3-1.7B-q8-f16-furos-laterais | system: system.parts.en.txt | think: False | tools: ['array_object', 'check_mesh', 'create_box', 'drill_hole', 'drill_hole_x', 'drill_hole_y', 'export_stl', 'list_objects', 'pad', 'pocket', 'screw_hole']
+
+PASS  box + M3 hole  (384s)
+      request : Make a box named pt_base, 60 by 40 by 8, with an M3 hole at x=10, y=5
+      called  : create_box {"name": "pt_base", "width": 60, "depth": 40, "height": 8} -> OK pt_base (0.0, 0.0, 0.0)
+      called  : screw_hole {"name": "pt_base", "size": "M3", "x": 10, "y": 5} -> OK pt_base hole diameter 3.4 at (10, 5, *) axis Z through [M3 clearance] vertice
+      expected: size=(60, 40, 8) volume~19127.4 (tolerance 0.03%) | measured: (19127.483, (60, 40, 8), True)
+      model   : The box pt_base has been created and an M3 hole has been added at x=10, y=5.
+
+PASS  box + 5 mm hole  (76s)
+      request : Create a box named pt_plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.
+      called  : create_box {"name": "pt_plate", "width": 80, "depth": 50, "height": 6} -> OK pt_plate (0.0, 0.0, 0.0)
+      called  : drill_hole {"name": "pt_plate", "diameter": 5, "x": -20, "y": 10} -> OK pt_plate hole diameter 5 at (-20, 10, *) axis Z through vertices=136 volume=2
+      expected: size=(80, 50, 6) volume~23882.2 (tolerance 0.03%) | measured: (23882.3794, (80, 50, 6), True)
+      model   : The box named pt_plate has been created and a 5 mm hole has been drilled at x=-20, y=10 along the Z-axis.
+
+PASS  box + 2 holes  (107s)
+      request : Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.
+      called  : create_box {"name": "pt_bracket", "width": 30, "depth": 30, "height": 10} -> OK pt_bracket (0.0, 0.0, 0.0)
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": -8, "y": 0} -> OK pt_bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=138 volume=8
+      called  : drill_hole {"name": "pt_bracket", "diameter": 4, "x": 8, "y": 0} -> OK pt_bracket hole diameter 4 at (8, 0, *) axis Z through vertices=268 volume=87
+      expected: size=(30, 30, 10) volume~8748.7 (tolerance 0.03%) | measured: (8749.0761, (30, 30, 10), True)
+      model   : The box pt_bracket has been created with two 4 mm holes at x=-8, y=0 and x=8, y=0, along the Z-axis.
+
+PASS  pad (raise a strip)  (78s)
+      request : Make a box named pt_strip, 100 by 10 by 2. Then raise a rectangle on its top face from x=-50 to x=-30 and from y=-4 to y=4, 2 high.
+      called  : create_box {"name": "pt_strip", "width": 100, "depth": 10, "height": 2} -> OK pt_strip (0.0, 0.0, 0.0)
+      called  : pad {"name": "pt_strip", "height": 2, "x1": -50, "x2": -30, "y1": -4, "y2": 4} -> OK pt_strip pad Z+ face at 1.0, height 2 vertices=18 volume=2320.0
+      expected: size=(100, 10, 4) volume~2320.0 (tolerance 0.03%) | measured: (2320.0, (100, 10, 4), True)
+      z range : expected (-1.0, 3.0) | measured (-1.0, 3.0)
+      model   : The box pt_strip has been created and a pad has been added to its top face.
+
+PASS  pocket (cut a recess)  (79s)
+      request : Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.
+      called  : create_box {"name": "pt_block", "width": 40, "depth": 40, "height": 10} -> OK pt_block (0.0, 0.0, 0.0)
+      called  : pocket {"name": "pt_block", "depth": 3, "x1": -10, "x2": 10, "y1": -10, "y2": 10} -> OK pt_block pocket Z+ face at 5.0, depth 3 vertices=16 volume=14800.0
+      expected: size=(40, 40, 10) volume~14800.0 (tolerance 0.03%) | measured: (14800.0, (40, 40, 10), True)
+      z range : expected (-5.0, 5.0) | measured (-5.0, 5.0)
+      model   : The pocket was created in the top face of pt_block.
+
+PASS  side hole along X (a foot)  (73s)
+      request : Make a box named pt_foot, 40 by 30 by 50. Drill a 6 mm hole through it, parallel to the X axis, at y=0 and z=10.
+      called  : create_box {"name": "pt_foot", "width": 40, "depth": 30, "height": 50} -> OK pt_foot (0.0, 0.0, 0.0)
+      called  : drill_hole_x {"name": "pt_foot", "diameter": 6, "y": 0, "z": 10} -> OK pt_foot hole diameter 6 at (*, 0, 10) axis X through vertices=136 volume=5887
+      expected: size=(40, 30, 50) volume~58869.0 (tolerance 0.03%) | measured: (58870.8426, (40, 30, 50), True)
+      model   : The hole is drilled through the box parallel to the X axis at y=0 and z=10.
+
+PASS  side hole along Y (an ear)  (77s)
+      request : Make a box named pt_ear, 50 by 20 by 30. Drill a 5 mm hole through it, parallel to the Y axis, at x=10 and z=-5.
+      called  : create_box {"name": "pt_ear", "width": 50, "depth": 20, "height": 30} -> OK pt_ear (0.0, 0.0, 0.0)
+      called  : drill_hole_y {"name": "pt_ear", "diameter": 5, "x": 10, "z": -5} -> OK pt_ear hole diameter 5 at (10, *, -5) axis Y through vertices=136 volume=2960
+      expected: size=(50, 20, 30) volume~29607.3 (tolerance 0.03%) | measured: (29607.9314, (50, 20, 30), True)
+      model   : The hole for pt_ear is drilled parallel to the Y-axis at x=10 and z=-5 with a diameter of 5 mm.
+
+The parts are left in the Blender scene, in a row (--show).
+RESULT qwen3-1.7B-q8-f16-furos-laterais: 7 passed, 0 failed, 0 skipped

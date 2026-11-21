@@ -1,0 +1,6 @@
+COM nome  (8s): create_box  args='{"name": "base\', " }'
+SEM nome  (20s): create_box  args='{"width": 60, "depth": 40, "height": 8, "x": 0, "y": 0, "z": 0}'
+outro nome (12s): create_box  args='{"name": "plate\', " }'
+so nome   sem chamada: 'You call blender-minor_create_box with {"name": "base", "width": 1, "depth": 1, "height": 1}.'
+
+[exited with code 0]

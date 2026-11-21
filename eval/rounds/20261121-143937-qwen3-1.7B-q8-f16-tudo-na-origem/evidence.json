@@ -1,0 +1,358 @@
+{
+ "label": "qwen3-1.7B-q8-f16-tudo-na-origem",
+ "when": "2026-11-21 14:39:37",
+ "llama_server": "http://<lan-ip>:9931",
+ "tolerance": 0.0003,
+ "system_prompt": "system.parts.en.txt",
+ "system_prompt_sha256": "06db096da25a0c8c631b891a11de34e4d8c9831fa9244c8cdcb9031daacd89e2",
+ "think": false,
+ "show": true,
+ "tools_seen_by_the_model": {
+  "list_objects": [],
+  "create_box": [
+   "name",
+   "width",
+   "depth",
+   "height",
+   "color"
+  ],
+  "array_object": [
+   "name",
+   "count_x",
+   "count_y",
+   "gap",
+   "apply"
+  ],
+  "pad": [
+   "name",
+   "x1",
+   "x2",
+   "y1",
+   "y2",
+   "height"
+  ],
+  "pocket": [
+   "name",
+   "x1",
+   "x2",
+   "y1",
+   "y2",
+   "depth"
+  ],
+  "drill_hole": [
+   "name",
+   "diameter",
+   "x",
+   "y",
+   "z",
+   "depth",
+   "clearance",
+   "counterbore_diameter",
+   "counterbore_depth",
+   "countersink_diameter",
+   "segments"
+  ],
+  "screw_hole": [
+   "name",
+   "size",
+   "kind",
+   "x",
+   "y",
+   "z",
+   "depth"
+  ],
+  "check_mesh": [
+   "name"
+  ],
+  "export_stl": [
+   "name",
+   "filename"
+  ]
+ },
+ "passed": 5,
+ "failed": 0,
+ "skipped": 0,
+ "seconds": 659,
+ "rows": [
+  {
+   "case": "box + M3 hole",
+   "pass": true,
+   "seconds": 332.2,
+   "request": "Make a box named pt_base, 60 by 40 by 8, with an M3 hole at x=10, y=5",
+   "object": "pt_base",
+   "expected": {
+    "size": [
+     60,
+     40,
+     8
+    ],
+    "volume": 19127.366,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 19127.483,
+    "size": [
+     60,
+     40,
+     8
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_base",
+      "width": 60,
+      "depth": 40,
+      "height": 8
+     },
+     "answer": "OK pt_base (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "screw_hole",
+     "arguments": {
+      "name": "pt_base",
+      "size": "M3",
+      "x": 10,
+      "y": 5
+     },
+     "answer": "OK pt_base hole diameter 3.4 at (10, 5, *) axis Z through [M3 clearance] vertices=136 volume=19127.483"
+    }
+   ],
+   "model_final": "The box pt_base has been created with an M3 hole at x=10, y=5."
+  },
+  {
+   "case": "box + 5 mm hole",
+   "pass": true,
+   "seconds": 69.0,
+   "request": "Create a box named pt_plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.",
+   "object": "pt_plate",
+   "expected": {
+    "size": [
+     80,
+     50,
+     6
+    ],
+    "volume": 23882.19,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 23882.3794,
+    "size": [
+     80,
+     50,
+     6
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_plate",
+      "width": 80,
+      "depth": 50,
+      "height": 6
+     },
+     "answer": "OK pt_plate (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_plate",
+      "diameter": 5,
+      "x": -20,
+      "y": 10
+     },
+     "answer": "OK pt_plate hole diameter 5 at (-20, 10, *) axis Z through vertices=136 volume=23882.3794"
+    }
+   ],
+   "model_final": "The box pt_plate has been created and a 5 mm hole has been drilled at x=-20, y=10."
+  },
+  {
+   "case": "box + 2 holes",
+   "pass": true,
+   "seconds": 99.6,
+   "request": "Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.",
+   "object": "pt_bracket",
+   "expected": {
+    "size": [
+     30,
+     30,
+     10
+    ],
+    "volume": 8748.673,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 8749.0761,
+    "size": [
+     30,
+     30,
+     10
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_bracket",
+      "width": 30,
+      "depth": 30,
+      "height": 10
+     },
+     "answer": "OK pt_bracket (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_bracket",
+      "diameter": 4,
+      "x": -8,
+      "y": 0
+     },
+     "answer": "OK pt_bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=138 volume=8874.5381"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_bracket",
+      "diameter": 4,
+      "x": 8,
+      "y": 0
+     },
+     "answer": "OK pt_bracket hole diameter 4 at (8, 0, *) axis Z through vertices=268 volume=8749.0761"
+    }
+   ],
+   "model_final": "The box pt_bracket has been created and two 4 mm holes drilled at x=-8, y=0 and x=8, y=0."
+  },
+  {
+   "case": "pad (raise a strip)",
+   "pass": true,
+   "seconds": 73.5,
+   "request": "Make a box named pt_strip, 100 by 10 by 2. Then raise a rectangle on its top face from x=-50 to x=-30 and from y=-4 to y=4, 2 high.",
+   "object": "pt_strip",
+   "expected": {
+    "size": [
+     100,
+     10,
+     4
+    ],
+    "volume": 2320,
+    "z_range": [
+     -1.0,
+     3.0
+    ]
+   },
+   "measured": {
+    "volume": 2320.0,
+    "size": [
+     100,
+     10,
+     4
+    ],
+    "manifold": true,
+    "z_range": [
+     -1.0,
+     3.0
+    ]
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_strip",
+      "width": 100,
+      "depth": 10,
+      "height": 2
+     },
+     "answer": "OK pt_strip (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "pad",
+     "arguments": {
+      "name": "pt_strip",
+      "height": 2,
+      "x1": -50,
+      "x2": -30,
+      "y1": -4,
+      "y2": 4
+     },
+     "answer": "OK pt_strip pad Z+ face at 1.0, height 2 vertices=18 volume=2320.0"
+    }
+   ],
+   "model_final": "The box pt_strip has been created and a pad has been added to its top face."
+  },
+  {
+   "case": "pocket (cut a recess)",
+   "pass": true,
+   "seconds": 76.6,
+   "request": "Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.",
+   "object": "pt_block",
+   "expected": {
+    "size": [
+     40,
+     40,
+     10
+    ],
+    "volume": 14800,
+    "z_range": [
+     -5.0,
+     5.0
+    ]
+   },
+   "measured": {
+    "volume": 14800.0,
+    "size": [
+     40,
+     40,
+     10
+    ],
+    "manifold": true,
+    "z_range": [
+     -5.0,
+     5.0
+    ]
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_block",
+      "width": 40,
+      "depth": 40,
+      "height": 10
+     },
+     "answer": "OK pt_block (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "pocket",
+     "arguments": {
+      "name": "pt_block",
+      "depth": 3,
+      "x1": -10,
+      "x2": 10,
+      "y1": -10,
+      "y2": 10
+     },
+     "answer": "OK pt_block pocket Z+ face at 5.0, depth 3 vertices=16 volume=14800.0"
+    }
+   ],
+   "model_final": "The box pt_block has been created and a pocket has been cut in its top face as specified."
+  }
+ ],
+ "note": "Recorded before eval/roundtrace.py existed: this folder has no git state, host or Blender version. The code that produced it is the working tree on top of the commit named below. Base commit: 96b702e.",
+ "why": "The 0.6B (R11) put the box at the coordinates of the hole or of the area, and the second hole fell in the void while the tool answered OK. Modeling is done at the origin and a part is moved only when it is finished, so the model must not be able to place the box.",
+ "changed": "x, y, z hidden from create_box (the box is always at the origin) and rule 4 rewritten: everything is modeled at the origin.",
+ "files": {
+  "blend": {
+   "sha256": "f3c56c6cb295c504d2d54ade4d6c226d1a78f1da13166b2cce2fba184db8c193",
+   "bytes": 988432
+  }
+ }
+}

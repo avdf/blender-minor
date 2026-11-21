@@ -1,0 +1,773 @@
+{
+ "label": "qwen3-1.7B-q8-f16-furos-laterais",
+ "when": "2026-11-21 15:08:36",
+ "why": "The parts job needs holes on the side of a part that stands up (a foot, an ear). drill_hole had axis and side hidden from the small model, so it could only drill along Z. Two tools with the axis in the NAME (drill_hole_x, drill_hole_y) were added; this round checks that the 1.7B uses them correctly and that the five earlier cases still pass with the longer prompt.",
+ "changed": "11 tools instead of 9 (drill_hole_x, drill_hole_y); two new cases (side hole along X on a 40x30x50 foot, along Y on a 50x20x30 ear); prompt lists the two tools and rule 5 names them; create_box has no position (box always at the origin); drill_hole refuses a hole in the void; blender-minor build with the relative no-op threshold.",
+ "compare_to": "rounds/20261121-143937-qwen3-1.7B-q8-f16-tudo-na-origem/evidence.json",
+ "git": {
+  "commit": "96b702eeb201ba6de8b436efecffcf4322706185",
+  "subject": "PARTS-RESULTS.md: round R11, Qwen3-0.6B fails all five cases of the strict check",
+  "uncommitted_files": [
+   "M Ops.cs",
+   " M README.md",
+   " M README.pt-BR.md",
+   " M SelfTest.cs",
+   " M eval/check_tools.py",
+   " M eval/evaluate_parts.py",
+   " M prompts/system.parts.en.txt",
+   "?? eval/__pycache__/",
+   "?? eval/ask.py",
+   "?? eval/rounds/",
+   "?? eval/roundtrace.py"
+  ],
+  "uncommitted_diff_sha256": "a6c221f030df1763da4f098b5cdc6fd25b4786b7e8dc005b74b163187513c661"
+ },
+ "host": {
+  "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+  "cpu": "Intel(R) Core(TM) i5-3317U CPU @ 1.70GHz",
+  "mem_total": "7570776 kB",
+  "python": "3.13.5"
+ },
+ "blender_version": "3.6.23",
+ "llama": {
+  "url": "http://<lan-ip>:9931",
+  "model_path": "/dotnet-llm-jit/Qwen3-1.7B-Q8_0.gguf",
+  "build_info": "b11673-282fe0980",
+  "total_slots": 1,
+  "n_ctx": 8192
+ },
+ "tolerance": 0.0003,
+ "think": false,
+ "show": true,
+ "system_prompt": "system.parts.en.txt",
+ "system_prompt_sha256": "058e4ce1be1587e0a29334c0eb363586eda5d788b1023caf276e72da72bea874",
+ "tools_seen_by_the_model": {
+  "list_objects": {
+   "name": "blender-minor_list_objects",
+   "description": "List the objects in the Blender scene (name, type, position). No arguments.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  "create_box": {
+   "name": "blender-minor_create_box",
+   "description": "Create a rectangular box with exact sizes. width = X size, depth = Y size, height = Z size. x, y, z are the center of the box.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "default Box"
+     },
+     "width": {
+      "type": "number",
+      "description": "size along X, default 1"
+     },
+     "depth": {
+      "type": "number",
+      "description": "size along Y, default 1"
+     },
+     "height": {
+      "type": "number",
+      "description": "size along Z, default 1"
+     },
+     "color": {
+      "type": "string",
+      "description": "name (red, blue...) or #RRGGBB"
+     }
+    }
+   }
+  },
+  "array_object": {
+   "name": "blender-minor_array_object",
+   "description": "Repeat an existing object in a grid (Blender's Array modifier): count_x copies along X and count_y along Y, with a gap between neighbours. Use it to print many copies of a small part so each layer has time to cool. By default the copies are merged into the object, so check_mesh and export_stl see all of them. At most 400 copies.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "count_x": {
+      "type": "number",
+      "description": "copies along X, 1 to 100, default 1"
+     },
+     "count_y": {
+      "type": "number",
+      "description": "copies along Y, 1 to 100, default 1"
+     },
+     "gap": {
+      "type": "number",
+      "description": "space between copies (same unit as the scene), default 2"
+     },
+     "apply": {
+      "type": "boolean",
+      "description": "merge the copies into the object, default true"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   }
+  },
+  "pad": {
+   "name": "blender-minor_pad",
+   "description": "Add material on a face of an existing object, like FreeCAD's Pad: a rectangle on the face is raised by height. axis + side choose the face (Z and + is the top, the default). x1, x2, y1, y2, z1, z2 are the corners of the rectangle: give only the two pairs that lie on that face (face Z: x and y; face X: y and z; face Y: x and z). Safe: a broken result leaves the object unchanged.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "x1": {
+      "type": "number",
+      "description": "rectangle corner"
+     },
+     "x2": {
+      "type": "number",
+      "description": "opposite corner"
+     },
+     "y1": {
+      "type": "number",
+      "description": "rectangle corner"
+     },
+     "y2": {
+      "type": "number",
+      "description": "opposite corner"
+     },
+     "height": {
+      "type": "number",
+      "description": "how far it rises from the face"
+     }
+    },
+    "required": [
+     "name",
+     "height"
+    ]
+   }
+  },
+  "pocket": {
+   "name": "blender-minor_pocket",
+   "description": "Cut a rectangular recess into a face of an existing object, like FreeCAD's Pocket: a rectangle on the face is cut depth deep. axis + side choose the face (Z and + is the top, the default). x1, x2, y1, y2, z1, z2 are the corners of the rectangle: give only the two pairs that lie on that face (face Z: x and y; face X: y and z; face Y: x and z). Safe: a broken result leaves the object unchanged.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "x1": {
+      "type": "number",
+      "description": "rectangle corner"
+     },
+     "x2": {
+      "type": "number",
+      "description": "opposite corner"
+     },
+     "y1": {
+      "type": "number",
+      "description": "rectangle corner"
+     },
+     "y2": {
+      "type": "number",
+      "description": "opposite corner"
+     },
+     "depth": {
+      "type": "number",
+      "description": "how deep it cuts into the object"
+     }
+    },
+    "required": [
+     "name",
+     "depth"
+    ]
+   }
+  },
+  "drill_hole": {
+   "name": "blender-minor_drill_hole",
+   "description": "Drill a round hole of an exact diameter in an existing object by name, along the X, Y or Z axis. Without depth the hole goes all the way through. With depth it is a blind hole that starts at the entry point (x, y, z) and goes into the part. Optional counterbore (a wider recess for a screw head) or countersink (a cone for a flat head).",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "diameter": {
+      "type": "number",
+      "description": "hole diameter"
+     },
+     "x": {
+      "type": "number",
+      "description": "X position"
+     },
+     "y": {
+      "type": "number",
+      "description": "Y position"
+     },
+     "z": {
+      "type": "number",
+      "description": "Z position"
+     },
+     "depth": {
+      "type": "number",
+      "description": "omit for a through hole"
+     },
+     "clearance": {
+      "type": "number",
+      "description": "extra diameter for 3D printing, default 0"
+     },
+     "counterbore_diameter": {
+      "type": "number",
+      "description": "recess diameter at the entry"
+     },
+     "counterbore_depth": {
+      "type": "number",
+      "description": "recess depth"
+     },
+     "countersink_diameter": {
+      "type": "number",
+      "description": "countersink diameter at the entry (90 degree cone)"
+     },
+     "segments": {
+      "type": "number",
+      "description": "sides of the hole, 8 to 256, default 64"
+     }
+    },
+    "required": [
+     "name",
+     "diameter"
+    ]
+   }
+  },
+  "drill_hole_x": {
+   "name": "blender-minor_drill_hole_x",
+   "description": "Drill a round hole all the way through an existing object, parallel to the X axis (from the side, for a part that stands up). y and z say where the hole is on that face.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "diameter": {
+      "type": "number",
+      "description": "hole diameter"
+     },
+     "y": {
+      "type": "number",
+      "description": "Y position"
+     },
+     "z": {
+      "type": "number",
+      "description": "Z position"
+     }
+    },
+    "required": [
+     "name",
+     "diameter",
+     "y",
+     "z"
+    ]
+   }
+  },
+  "drill_hole_y": {
+   "name": "blender-minor_drill_hole_y",
+   "description": "Drill a round hole all the way through an existing object, parallel to the Y axis (from the front, for a part that stands up). x and z say where the hole is on that face.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "diameter": {
+      "type": "number",
+      "description": "hole diameter"
+     },
+     "x": {
+      "type": "number",
+      "description": "X position"
+     },
+     "z": {
+      "type": "number",
+      "description": "Z position"
+     }
+    },
+    "required": [
+     "name",
+     "diameter",
+     "x",
+     "z"
+    ]
+   }
+  },
+  "screw_hole": {
+   "name": "blender-minor_screw_hole",
+   "description": "Drill a hole for a standard screw size by name, using a table of typical dimensions. kind: clearance (screw passes through), counterbore (plus a recess for a socket head), countersunk (plus a cone for a flat head) or insert (blind hole for a heat-set insert; needs the entry point z along the axis).",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "size": {
+      "type": "string",
+      "description": "M2, M2.5, M3, M4, M5, M6 or M8 (default M3)"
+     },
+     "kind": {
+      "type": "string",
+      "description": "clearance (default), counterbore, countersunk or insert"
+     },
+     "x": {
+      "type": "number",
+      "description": "X position"
+     },
+     "y": {
+      "type": "number",
+      "description": "Y position"
+     },
+     "z": {
+      "type": "number",
+      "description": "Z position"
+     },
+     "depth": {
+      "type": "number",
+      "description": "optional: makes a clearance hole blind"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   }
+  },
+  "check_mesh": {
+   "name": "blender-minor_check_mesh",
+   "description": "Check an existing object: is the mesh closed (manifold, printable), its volume and its dimensions.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   }
+  },
+  "export_stl": {
+   "name": "blender-minor_export_stl",
+   "description": "Export an existing object as a binary STL file for a slicer. Only a file name is accepted; the file is written to the export folder.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "exact object name, as listed by list_objects"
+     },
+     "filename": {
+      "type": "string",
+      "description": "file name, e.g. bracket.stl (default: the object name)"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   }
+  }
+ },
+ "passed": 7,
+ "failed": 0,
+ "skipped": 0,
+ "seconds": 888,
+ "rows": [
+  {
+   "case": "box + M3 hole",
+   "pass": true,
+   "seconds": 383.9,
+   "request": "Make a box named pt_base, 60 by 40 by 8, with an M3 hole at x=10, y=5",
+   "object": "pt_base",
+   "expected": {
+    "size": [
+     60,
+     40,
+     8
+    ],
+    "volume": 19127.366,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 19127.483,
+    "size": [
+     60,
+     40,
+     8
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_base",
+      "width": 60,
+      "depth": 40,
+      "height": 8
+     },
+     "answer": "OK pt_base (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "screw_hole",
+     "arguments": {
+      "name": "pt_base",
+      "size": "M3",
+      "x": 10,
+      "y": 5
+     },
+     "answer": "OK pt_base hole diameter 3.4 at (10, 5, *) axis Z through [M3 clearance] vertices=136 volume=19127.483"
+    }
+   ],
+   "model_final": "The box pt_base has been created and an M3 hole has been added at x=10, y=5."
+  },
+  {
+   "case": "box + 5 mm hole",
+   "pass": true,
+   "seconds": 75.8,
+   "request": "Create a box named pt_plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.",
+   "object": "pt_plate",
+   "expected": {
+    "size": [
+     80,
+     50,
+     6
+    ],
+    "volume": 23882.19,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 23882.3794,
+    "size": [
+     80,
+     50,
+     6
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_plate",
+      "width": 80,
+      "depth": 50,
+      "height": 6
+     },
+     "answer": "OK pt_plate (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_plate",
+      "diameter": 5,
+      "x": -20,
+      "y": 10
+     },
+     "answer": "OK pt_plate hole diameter 5 at (-20, 10, *) axis Z through vertices=136 volume=23882.3794"
+    }
+   ],
+   "model_final": "The box named pt_plate has been created and a 5 mm hole has been drilled at x=-20, y=10 along the Z-axis."
+  },
+  {
+   "case": "box + 2 holes",
+   "pass": true,
+   "seconds": 107.0,
+   "request": "Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.",
+   "object": "pt_bracket",
+   "expected": {
+    "size": [
+     30,
+     30,
+     10
+    ],
+    "volume": 8748.673,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 8749.0761,
+    "size": [
+     30,
+     30,
+     10
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_bracket",
+      "width": 30,
+      "depth": 30,
+      "height": 10
+     },
+     "answer": "OK pt_bracket (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_bracket",
+      "diameter": 4,
+      "x": -8,
+      "y": 0
+     },
+     "answer": "OK pt_bracket hole diameter 4 at (-8, 0, *) axis Z through vertices=138 volume=8874.5381"
+    },
+    {
+     "tool": "drill_hole",
+     "arguments": {
+      "name": "pt_bracket",
+      "diameter": 4,
+      "x": 8,
+      "y": 0
+     },
+     "answer": "OK pt_bracket hole diameter 4 at (8, 0, *) axis Z through vertices=268 volume=8749.0761"
+    }
+   ],
+   "model_final": "The box pt_bracket has been created with two 4 mm holes at x=-8, y=0 and x=8, y=0, along the Z-axis."
+  },
+  {
+   "case": "pad (raise a strip)",
+   "pass": true,
+   "seconds": 78.5,
+   "request": "Make a box named pt_strip, 100 by 10 by 2. Then raise a rectangle on its top face from x=-50 to x=-30 and from y=-4 to y=4, 2 high.",
+   "object": "pt_strip",
+   "expected": {
+    "size": [
+     100,
+     10,
+     4
+    ],
+    "volume": 2320,
+    "z_range": [
+     -1.0,
+     3.0
+    ]
+   },
+   "measured": {
+    "volume": 2320.0,
+    "size": [
+     100,
+     10,
+     4
+    ],
+    "manifold": true,
+    "z_range": [
+     -1.0,
+     3.0
+    ]
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_strip",
+      "width": 100,
+      "depth": 10,
+      "height": 2
+     },
+     "answer": "OK pt_strip (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "pad",
+     "arguments": {
+      "name": "pt_strip",
+      "height": 2,
+      "x1": -50,
+      "x2": -30,
+      "y1": -4,
+      "y2": 4
+     },
+     "answer": "OK pt_strip pad Z+ face at 1.0, height 2 vertices=18 volume=2320.0"
+    }
+   ],
+   "model_final": "The box pt_strip has been created and a pad has been added to its top face."
+  },
+  {
+   "case": "pocket (cut a recess)",
+   "pass": true,
+   "seconds": 78.6,
+   "request": "Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.",
+   "object": "pt_block",
+   "expected": {
+    "size": [
+     40,
+     40,
+     10
+    ],
+    "volume": 14800,
+    "z_range": [
+     -5.0,
+     5.0
+    ]
+   },
+   "measured": {
+    "volume": 14800.0,
+    "size": [
+     40,
+     40,
+     10
+    ],
+    "manifold": true,
+    "z_range": [
+     -5.0,
+     5.0
+    ]
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_block",
+      "width": 40,
+      "depth": 40,
+      "height": 10
+     },
+     "answer": "OK pt_block (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "pocket",
+     "arguments": {
+      "name": "pt_block",
+      "depth": 3,
+      "x1": -10,
+      "x2": 10,
+      "y1": -10,
+      "y2": 10
+     },
+     "answer": "OK pt_block pocket Z+ face at 5.0, depth 3 vertices=16 volume=14800.0"
+    }
+   ],
+   "model_final": "The pocket was created in the top face of pt_block."
+  },
+  {
+   "case": "side hole along X (a foot)",
+   "pass": true,
+   "seconds": 73.4,
+   "request": "Make a box named pt_foot, 40 by 30 by 50. Drill a 6 mm hole through it, parallel to the X axis, at y=0 and z=10.",
+   "object": "pt_foot",
+   "expected": {
+    "size": [
+     40,
+     30,
+     50
+    ],
+    "volume": 58869.027,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 58870.8426,
+    "size": [
+     40,
+     30,
+     50
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_foot",
+      "width": 40,
+      "depth": 30,
+      "height": 50
+     },
+     "answer": "OK pt_foot (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "drill_hole_x",
+     "arguments": {
+      "name": "pt_foot",
+      "diameter": 6,
+      "y": 0,
+      "z": 10
+     },
+     "answer": "OK pt_foot hole diameter 6 at (*, 0, 10) axis X through vertices=136 volume=58870.8426"
+    }
+   ],
+   "model_final": "The hole is drilled through the box parallel to the X axis at y=0 and z=10."
+  },
+  {
+   "case": "side hole along Y (an ear)",
+   "pass": true,
+   "seconds": 77.3,
+   "request": "Make a box named pt_ear, 50 by 20 by 30. Drill a 5 mm hole through it, parallel to the Y axis, at x=10 and z=-5.",
+   "object": "pt_ear",
+   "expected": {
+    "size": [
+     50,
+     20,
+     30
+    ],
+    "volume": 29607.301,
+    "z_range": null
+   },
+   "measured": {
+    "volume": 29607.9314,
+    "size": [
+     50,
+     20,
+     30
+    ],
+    "manifold": true,
+    "z_range": null
+   },
+   "calls": [
+    {
+     "tool": "create_box",
+     "arguments": {
+      "name": "pt_ear",
+      "width": 50,
+      "depth": 20,
+      "height": 30
+     },
+     "answer": "OK pt_ear (0.0, 0.0, 0.0)"
+    },
+    {
+     "tool": "drill_hole_y",
+     "arguments": {
+      "name": "pt_ear",
+      "diameter": 5,
+      "x": 10,
+      "z": -5
+     },
+     "answer": "OK pt_ear hole diameter 5 at (10, *, -5) axis Y through vertices=136 volume=29607.9314"
+    }
+   ],
+   "model_final": "The hole for pt_ear is drilled parallel to the Y-axis at x=10 and z=-5 with a diameter of 5 mm."
+  }
+ ],
+ "files": {
+  "viewport": {
+   "sha256": "c4058514a27ee2df447b3a43f0a05035be901df4a0cec3bc789796ba5bd8b41a",
+   "bytes": 963037
+  },
+  "window": {
+   "sha256": "6da2fff41153f877ad04afc9dd8a5dbebf11b9208e966ee2246e9822e35e7b63",
+   "bytes": 1089450
+  },
+  "blend": {
+   "sha256": "25e3e50f28ba2c0d15bd2490a0a1f2a99094d0bec2a413a91fe74ed936c75738",
+   "bytes": 1031920
+  }
+ }
+}

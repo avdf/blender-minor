@@ -1,0 +1,40 @@
+TRANSCRITO DA SESSAO (21/11/2026): estas saidas apareceram no terminal e nao foram gravadas em arquivo na hora.
+O texto abaixo e o que o terminal mostrou; so o formato da moldura foi acrescentado.
+
+=== R0: create_box com "name" por ULTIMO no esquema; Qwen3-1.7B Q8_0, KV f16; tolerancia 1% (teste frouxo) ===
+ferramentas vistas pelo modelo: ['list_objects', 'create_box', 'move_object', 'boolean_op', 'drill_hole', 'screw_hole', 'check_mesh', 'export_stl']
+
+### box + M3 hole  (264s)  FALHOU
+  chamou create_box {"name": "base', "} -> OK base (0.0, 0.0, 0.0)
+  chamou screw_hole {"name": "base", "size": "M3", "x": 10, "y": 5} -> OK base hole diameter 3.4 at (10, 5, *) axis Z through [M3 clearance]
+  esperado: dims=(60, 40, 8) volume~19127.4 | medido no Blender: (1.0, (1, 1, 1), True)
+### box + 5 mm hole  (62s)  FALHOU
+  chamou create_box {"name": "plate', "} -> OK plate (0.0, 0.0, 0.0)
+  esperado: dims=(80, 50, 6) volume~23882.2 | medido no Blender: (1.0, (1, 1, 1), True)
+### box + 2 holes  (86s)  FALHOU
+  chamou create_box {"name": "bracket', "} -> OK bracket (0.0, 0.0, 0.0)
+  esperado: dims=(30, 30, 10) volume~8748.7 | medido no Blender: (1.0, (1, 1, 1), True)
+RESULTADO: 0/3 pecas corretas   (a caixa saia 1x1x1: os tamanhos se perdiam na chamada truncada)
+
+=== R0a: resposta CRUA do servidor para "Make a box named base, 60 by 40 by 8" ===
+tempo: 12s | tokens: {'completion_tokens': 27, 'prompt_tokens': 2322}
+tool_call: blender-minor_create_box | arguments (string crua): '{"name": "base\', " }'
+(com parse_tool_calls=false o resultado foi o mesmo: a quebra acontece antes do leitor de chamadas)
+
+=== R0b: o mesmo pedido COM e SEM nome (saida do arquivo r0b-hipotese-name-com-e-sem-nome.txt) ===
+COM nome  (8s): create_box  args='{"name": "base\', " }'
+SEM nome  (20s): create_box  args='{"width": 60, "depth": 40, "height": 8, "x": 0, "y": 0, "z": 0}'
+outro nome (12s): create_box  args='{"name": "plate\', " }'
+so nome   sem chamada
+
+=== R0c: hipotese "colisao do campo name" => renomear name para object_name (so no cliente) ===
+ferramentas com object_name: 6 de 8
+create_box args={"object_name": "base', " }      <- CONTINUOU QUEBRADO (hipotese errada)
+create_box args={"object_name": "plate', " }  /  drill_hole args={"object_name": "plate", "diameter": 5, "x": -20, "y": 10}   <- drill_hole (name 1o) saiu certo
+create_box args={"object_name": "bracket', " }
+
+=== R0d: causa achada: create_box tinha name OPCIONAL e ULTIMO; drill_hole tinha name OBRIGATORIO e PRIMEIRO. Teste: pôr name primeiro (so no cliente) ===
+ordem em create_box agora: ['name', 'width', 'depth', 'height', 'x', 'y', 'z', 'color']
+create_box args={"name": "base", "width": 60, "depth": 40, "height": 8, "x": 0, "y": 0, "z": 0}   screw_hole args={"name": "base", "size": "M3", "x": 10, "y": 5, "z": 0, "axis": "Z"}
+create_box args={"name": "plate", "width": 80, "depth": 50, "height": 6, "x": -20, "y": 10, "z": 0}   drill_hole args={"name": "plate", "diameter": 5, ...}
+=> corrigido no codigo do blender-minor (commit bacf745): name e a 1a propriedade de todo esquema.

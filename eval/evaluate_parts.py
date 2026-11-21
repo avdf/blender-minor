@@ -14,7 +14,7 @@ Options: --blender-mcp (default http://127.0.0.1:9191/, used only to remove the 
 
 Exit code 0 = every case that ran was correct.
 """
-import argparse, json, math, os, re, sys, time
+import argparse, json, math, os, re, sys, time, urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # python -I does not add the script folder
 import evaluate_model as ev                                        # reuse its small HTTP helpers
@@ -29,6 +29,7 @@ ap.add_argument("--tool-prefix", default="blender-minor_")
 ap.add_argument("--think", action="store_true", help="enable Qwen3 reasoning")
 ap.add_argument("--max-rounds", type=int, default=5)
 ap.add_argument("--max-tokens", type=int, default=400)
+ap.add_argument("--only", default="", help="run only the cases whose label contains this text (e.g. --only holes)")
 a = ap.parse_args()
 P = a.tool_prefix
 
@@ -37,24 +38,40 @@ def box_minus(w, d, h, holes=(), cuts=0.0, adds=0.0):
     return w * d * h - sum(math.pi * (dia / 2) ** 2 * h for dia in holes) - cuts + adds
 
 
-# (label, tools it needs, request, object name, expected size, expected volume)
+# Volume tolerance: 0.03%. A 1% tolerance let a 3 mm hole pass for an M3 clearance hole (3.4 mm), a 0.08% difference.
+TOL = 0.0003
+
+# (label, tools it needs, request, object name, expected size, expected volume, expected (min z, max z) or None)
+# The z range tells WHERE the material is: a strip raised on the bottom face has the same volume and height as one on the top.
 CASES = [
     ("box + M3 hole", {"create_box", "screw_hole"},
      "Make a box named pt_base, 60 by 40 by 8, with an M3 hole at x=10, y=5",
-     "pt_base", (60, 40, 8), box_minus(60, 40, 8, [3.4])),
+     "pt_base", (60, 40, 8), box_minus(60, 40, 8, [3.4]), None),
     ("box + 5 mm hole", {"create_box", "drill_hole"},
      "Create a box named pt_plate, 80 by 50 by 6, and drill a 5 mm hole at x=-20, y=10.",
-     "pt_plate", (80, 50, 6), box_minus(80, 50, 6, [5.0])),
+     "pt_plate", (80, 50, 6), box_minus(80, 50, 6, [5.0]), None),
     ("box + 2 holes", {"create_box", "drill_hole"},
      "Make a box named pt_bracket, 30 by 30 by 10. Drill a 4 mm hole at x=-8, y=0 and another 4 mm hole at x=8, y=0.",
-     "pt_bracket", (30, 30, 10), box_minus(30, 30, 10, [4.0, 4.0])),
+     "pt_bracket", (30, 30, 10), box_minus(30, 30, 10, [4.0, 4.0]), None),
     ("pad (raise a strip)", {"create_box", "pad"},
      "Make a box named pt_strip, 100 by 10 by 2. Then raise a rectangle on its top face from x=-50 to x=-30 and from y=-4 to y=4, 2 high.",
-     "pt_strip", (100, 10, 4), 100 * 10 * 2 + 20 * 8 * 2),
+     "pt_strip", (100, 10, 4), 100 * 10 * 2 + 20 * 8 * 2, (-1.0, 3.0)),
     ("pocket (cut a recess)", {"create_box", "pocket"},
      "Make a box named pt_block, 40 by 40 by 10. Cut a pocket in its top face from x=-10 to x=10 and from y=-10 to y=10, 3 deep.",
-     "pt_block", (40, 40, 10), 40 * 40 * 10 - 20 * 20 * 3),
+     "pt_block", (40, 40, 10), 40 * 40 * 10 - 20 * 20 * 3, (-5.0, 5.0)),
 ]
+
+
+def z_range(obj):
+    """Lowest and highest z of the object in world space, read through the Blender MCP (execute_blender_code)."""
+    code = ("import bpy\nfrom mathutils import Vector\no = bpy.data.objects['%s']\n"
+            "zs = [(o.matrix_world @ Vector(c)).z for c in o.bound_box]\nprint('ZRANGE', min(zs), max(zs))" % obj)
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "execute_blender_code", "arguments": {"code": code}}}
+    req = urllib.request.Request(a.blender_mcp, data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
+    text = urllib.request.urlopen(req, timeout=60).read().decode()
+    m = re.search(r"ZRANGE (-?[0-9.]+) (-?[0-9.]+)", text.replace("\\n", " "))
+    return (float(m.group(1)), float(m.group(2))) if m else None
 
 defs = [t["definition"] for t in ev.http_json(a.url + "/tools", timeout=20)]
 have = {d["function"]["name"].replace(P, "") for d in defs}
@@ -62,7 +79,9 @@ system = open(a.system, encoding="utf-8").read() if a.system and os.path.exists(
 print(f"== {a.label} | system: {os.path.basename(a.system) if system else '-'} | think: {a.think} | tools: {sorted(have)}\n")
 
 passed = failed = skipped = 0
-for label, needs, request, obj, dims, vol in CASES:
+for label, needs, request, obj, dims, vol, zr in CASES:
+    if a.only and a.only.lower() not in label.lower():
+        continue
     if not needs <= have:
         print(f"SKIP  {label}: needs {sorted(needs - have)}")
         skipped += 1
@@ -100,14 +119,23 @@ for label, needs, request, obj, dims, vol in CASES:
         mv, md = re.search(r"volume=([0-9.]+)", r), re.search(r"dimensions=\(([^)]*)\)", r)
         measured = (float(mv.group(1)) if mv else None,
                     tuple(round(float(x)) for x in md.group(1).split(",")) if md else None, "manifold=True" in r)
-    ok = bool(measured and measured[0] and measured[1] == dims and abs(measured[0] - vol) / vol < 0.01 and measured[2])
+    zmeasured = None
+    if zr is not None and obj in scene:
+        try:
+            zmeasured = z_range(obj)
+        except Exception:
+            zmeasured = None
+    z_ok = zr is None or (zmeasured is not None and all(abs(m_ - e_) < 0.01 for m_, e_ in zip(zmeasured, zr)))
+    ok = bool(measured and measured[0] and measured[1] == dims and abs(measured[0] - vol) / vol < TOL and measured[2] and z_ok)
     passed += 1 if ok else 0
     failed += 0 if ok else 1
     print(f"{'PASS' if ok else 'FAIL'}  {label}  ({dt:.0f}s)")
     print(f"      request : {request}")
     for fn, args_, text in calls:
         print(f"      called  : {fn} {json.dumps(args_)} -> {text[:80].replace(chr(10), ' ')}")
-    print(f"      expected: size={dims} volume~{vol:.1f} | measured: {measured}")
+    print(f"      expected: size={dims} volume~{vol:.1f} (tolerance {TOL * 100:.2f}%) | measured: {measured}")
+    if zr is not None:
+        print(f"      z range : expected {zr} | measured {zmeasured}")
     if final:
         print(f"      model   : {final[:150].replace(chr(10), ' ')}")
     print()

@@ -48,7 +48,7 @@ as `roxa`) or `#RRGGBB`.
 | `move_object` | `name` (required), `x`, `y`, `z`, `relative` | moves an existing object by name; axes you omit stay put |
 | `bevel_object` | `name` (required), `width`, `segments` | adds/updates a Bevel modifier on an existing mesh |
 | `array_object` | `name` (required), `count_x`, `count_y`, `gap`, `apply` | repeats an object in a grid with Blender's Array modifier, for printing many copies of a small part so each layer can cool; merged into the object by default (`apply`), so `check_mesh` and `export_stl` see every copy; max 400 copies |
-| `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | a box with exact sizes (x, y, z = its center) |
+| `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | a box with exact sizes (x, y, z = its center); a `name` you give that is already taken is refused, not renamed to `.001` |
 | `set_dimensions` | `name` (required), `x`, `y`, `z` | sets the exact size of an existing object |
 | `pad` | `name`, `height` (required), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | adds material on a face, like FreeCAD's Pad: a rectangle is raised by `height`. The face plane is the **real surface under the rectangle** (rays), so it also works on a stepped part; refuses a rectangle that touches nothing and never answers OK when nothing changed |
 | `pocket` | `name`, `depth` (required), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | cuts a rectangular recess into a face, like FreeCAD's Pocket; same face rules as `pad` |
@@ -152,6 +152,17 @@ pass `--allow` with the tool names the model should see. Anything else is hidden
 "args": ["-I", "/path/to/tools/mcp_stdio_bridge.py", "http://127.0.0.1:9192/",
          "--allow", "create_box,drill_hole,screw_hole,list_objects"]
 ```
+
+**Hide parameters too.** A small model fills optional parameters on impulse: Qwen3-1.7B kept sending `axis: "X"` to
+`drill_hole`, and `side: "-"` to `pad` (a strip raised on the bottom face instead of the top), even with a prompt that said not
+to. `--hide tool.param,...` removes them from `tools/list` and drops them from any call, so the model cannot choose them. For the
+parts job:
+
+```json
+"--hide", "drill_hole.axis,drill_hole.side,screw_hole.axis,screw_hole.side,pad.axis,pad.side,pad.z1,pad.z2,pocket.axis,pocket.side,pocket.z1,pocket.z2"
+```
+
+What the model cannot see it cannot get wrong, and it costs fewer prompt tokens too.
 
 **Property order matters.** `llama-server` turns each tool schema into a grammar that keeps the property order, and a
 model writes the name first ("a box called base, 60 by 40..."). Every tool therefore publishes `name` as its **first**

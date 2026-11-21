@@ -60,6 +60,13 @@ try:
     # pad / pocket on a 100 x 10 x 2 plate: a strip raised at one end, then a recess, then a recess INSIDE the raised strip
     make("ct_plate", width=100, depth=10, height=2, x=0, y=200, z=1)
     check("plate", volume("ct_plate"), 100 * 10 * 2)
+    again = call("create_box", name="ct_plate", width=1, depth=1, height=1)
+    expect_error("a box named like an existing object is refused (no silent .001)", again)
+    check("the refused box changed nothing", volume("ct_plate"), 100 * 10 * 2)
+    if "ct_plate.001" in call("list_objects"):
+        fails += 1
+        print("FAIL  a ct_plate.001 was created anyway")
+        _made.append("ct_plate.001")
     call("pad", name="ct_plate", x1=-50, x2=-30, y1=196, y2=204, height=2)
     check("pad 20x8x2", volume("ct_plate"), 2000 + 20 * 8 * 2)
     call("pocket", name="ct_plate", x1=10, x2=30, y1=197, y2=203, depth=1)

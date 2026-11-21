@@ -267,7 +267,18 @@ public static class OpScripts
         o["name"] = ShapeScripts.Text(args, "name") is { Length: > 0 } nm ? nm : "Box";
         using var doc = JsonDocument.Parse(o.ToJsonString());
         string scale = $"o.scale = ({N(w)}, {N(d)}, {N(h)})\nbpy.ops.object.transform_apply(location=False, rotation=False, scale=True)";
-        return ShapeScripts.Build(ShapeScripts.Find("create_cube")!, doc.RootElement, scale);
+        var (script, err) = ShapeScripts.Build(ShapeScripts.Find("create_cube")!, doc.RootElement, scale);
+        // A NAME THE USER GAVE that is already taken is an error, not a silent "base.001": a small model that creates the box twice
+        // (once per hole) would then drill the first one and think it is done. Without a name Blender numbers boxes as usual.
+        string? given = ShapeScripts.Text(args, "name");
+        if (err is not null || script is null || string.IsNullOrWhiteSpace(given)) return (script, err);
+        string lit = JsonSerializer.Serialize(given);
+        var sb = new StringBuilder("import bpy\n");
+        sb.Append($"if bpy.data.objects.get({lit}) is not None:\n");
+        sb.Append($"    print(\"ERROR: an object named \" + {lit} + \" already exists. Pick another name, or change that object (drill_hole, pad, pocket...) instead of creating it again.\")\n");
+        sb.Append("else:\n");
+        foreach (var line in script.Split('\n')) sb.Append("    ").Append(line).Append('\n');
+        return (sb.ToString().TrimEnd('\n'), null);
     }
 
     private static (string? Script, string? Error) BuildSetDimensions(string lit, JsonElement args)

@@ -48,7 +48,7 @@ feminino, como `roxa`) ou `#RRGGBB`.
 | `move_object` | `name` (obrigatório), `x`, `y`, `z`, `relative` | move um objeto existente pelo nome; eixos omitidos ficam parados |
 | `bevel_object` | `name` (obrigatório), `width`, `segments` | adiciona/atualiza um modificador Bevel num objeto existente |
 | `array_object` | `name` (obrigatório), `count_x`, `count_y`, `gap`, `apply` | repete um objeto em grade com o modificador Array do Blender, para imprimir várias cópias de uma peça pequena e cada camada ter tempo de esfriar; por padrão as cópias viram parte do objeto (`apply`), então `check_mesh` e `export_stl` enxergam todas; no máximo 400 cópias |
-| `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | uma caixa com medidas exatas (x, y, z = o centro dela) |
+| `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | uma caixa com medidas exatas (x, y, z = o centro dela); um `name` que você deu e já existe é recusado, em vez de virar `.001` |
 | `set_dimensions` | `name` (obrigatório), `x`, `y`, `z` | define o tamanho exato de um objeto existente |
 | `pad` | `name`, `height` (obrigatórios), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | acrescenta material numa face, como o Pad do FreeCAD: um retângulo sobe `height`. O plano da face é a **superfície real sob o retângulo** (raios), então funciona também em peça com degrau; recusa um retângulo que não toca em nada e nunca responde OK quando nada mudou |
 | `pocket` | `name`, `depth` (obrigatórios), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | corta um rebaixo retangular numa face, como o Pocket do FreeCAD; mesmas regras de face do `pad` |
@@ -131,6 +131,17 @@ própria, então a ponte tem: passe `--allow` com os nomes das ferramentas que o
 "args": ["-I", ".../mcp_stdio_bridge.py", "http://127.0.0.1:9192/",
          "--allow", "create_box,drill_hole,screw_hole,list_objects"]
 ```
+
+**Esconda também parâmetros.** Um modelo pequeno preenche parâmetro opcional por impulso: o Qwen3-1.7B mandava `axis: "X"` para o
+`drill_hole`, e `side: "-"` para o `pad` (uma faixa levantada na face de baixo, e não na de cima), mesmo com um prompt dizendo
+para não mandar. `--hide ferramenta.parametro,...` tira esses parâmetros do `tools/list` e os descarta de qualquer chamada, então
+o modelo não consegue escolhê-los. Para o trabalho de peças:
+
+```json
+"--hide", "drill_hole.axis,drill_hole.side,screw_hole.axis,screw_hole.side,pad.axis,pad.side,pad.z1,pad.z2,pocket.axis,pocket.side,pocket.z1,pocket.z2"
+```
+
+O que o modelo não enxerga ele não erra, e ainda gasta menos tokens de prompt.
 
 **A ordem das propriedades importa.** O `llama-server` transforma o esquema de cada ferramenta numa gramática que mantém a
 ordem dos campos, e o modelo escreve o nome primeiro ("uma caixa chamada base, 60 por 40..."). Por isso toda ferramenta

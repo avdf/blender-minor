@@ -123,6 +123,16 @@ public static class OpScripts
                          new OpProp("segments", "number", $"sides of the hole, 8 to {MaxSegments}, default {DefaultSegments}")]).ToArray(),
             ["name", "diameter"]),
         .. FaceOps(),
+        // The hexagonal recess that holds a nut so it cannot turn, with the sizes taken from the screw table. Its own tools (and not a
+        // pocket with a "sides" number) so a small model only gives the screw size and the position.
+        new("nut_trap",
+            "Cut the hexagonal recess that holds a nut, from the TOP face of an existing object, so the nut cannot turn. size is the screw size (M2 to M8); the width across the flats and the depth come from the nut table, plus a little room.",
+            [NameProp, new("size", "string", "screw size: M2, M2.5, M3, M4, M5, M6 or M8"), X, Y, new("clearance", "number", "extra room around the nut, default 0.2")],
+            ["name", "size", "x", "y"]),
+        new("nut_trap_bottom",
+            "Cut the hexagonal recess that holds a nut, from the BOTTOM face of an existing object (the screw enters from the top and the nut sits underneath), so the nut cannot turn. size is the screw size (M2 to M8).",
+            [NameProp, new("size", "string", "screw size: M2, M2.5, M3, M4, M5, M6 or M8"), X, Y, new("clearance", "number", "extra room around the nut, default 0.2")],
+            ["name", "size", "x", "y"]),
         // Side holes for a part that stands up (a foot, an ear). The axis is in the tool NAME, not in a parameter: a small model fills
         // an optional "axis" on impulse (and gets it wrong), but it does not pick the wrong tool name.
         new("drill_hole_x",
@@ -205,6 +215,8 @@ public static class OpScripts
         "pocket_front" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "Y", "-"), additive: false)),
         "pad_back" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "Y", "+"), additive: true)),
         "pocket_back" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, WithFace(a, "Y", "+"), additive: false)),
+        "nut_trap" => WithObject(args, "name", (lit, a) => BuildNutTrap(lit, a, top: true)),
+        "nut_trap_bottom" => WithObject(args, "name", (lit, a) => BuildNutTrap(lit, a, top: false)),
         "drill_hole_x" => WithObject(args, "name", (lit, a) => BuildDrill(lit, WithAxis(a, "X"), null)),
         "drill_hole_y" => WithObject(args, "name", (lit, a) => BuildDrill(lit, WithAxis(a, "Y"), null)),
         "screw_hole" => WithObject(args, "name", (lit, a) => BuildScrewHole(lit, a)),
@@ -249,6 +261,70 @@ public static class OpScripts
         node["axis"] = axis;
         node["side"] = side;
         return JsonSerializer.SerializeToElement(node);
+    }
+
+    /// <summary>nut_trap / nut_trap_bottom: a hexagonal recess for a nut, cut from the top or the bottom face. Blender's 6-sided cylinder has its corners on +-Y, so it is
+    /// turned 90 degrees: the corners are on +-X and two flat edges are parallel to X. Across the flats = nut width (screw table) + clearance; depth = nut thickness + clearance. The
+    /// surface under it is found with rays, like pad and pocket; a part thinner than the recess is refused.</summary>
+    private static (string? Script, string? Error) BuildNutTrap(string lit, JsonElement args, bool top)
+    {
+        string size = (ShapeScripts.Text(args, "size") ?? "M3").Trim().ToUpperInvariant();
+        var (table, _) = Screws.Load();
+        if (!table.TryGetValue(size, out var row))
+            return (null, $"Unknown screw size '{size}'. Known sizes: {string.Join(", ", table.Keys.OrderBy(k => k))}.");
+        if (!row.TryGetValue("nut_flats", out double flats) || !row.TryGetValue("nut_thickness", out double thick))
+            return (null, $"The screw table has no nut dimensions (nut_flats, nut_thickness) for {size}.");
+        var (clr, ec) = ShapeScripts.Number(args, "clearance", 0.2, 0, 2); if (ec is not null) return (null, ec);
+        var (x, ex) = ShapeScripts.Number(args, "x", 0, -CoordLimit, CoordLimit); if (ex is not null) return (null, ex);
+        var (y, ey) = ShapeScripts.Number(args, "y", 0, -CoordLimit, CoordLimit); if (ey is not null) return (null, ey);
+        double across = flats + clr, radius = across / Math.Sqrt(3), depth = thick + clr;   // radius: corner of the hexagon
+
+        string face = top ? "top" : "bottom";
+        var sb = new StringBuilder(PyHelpers).Append('\n');
+        sb.Append($"o = bpy.data.objects.get({lit})\n");
+        sb.Append("if o is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("elif o.type != 'MESH':\n");
+        sb.Append("    print(\"ERROR: \" + o.name + \" is \" + o.type + \"; a nut trap needs a MESH object\")\n");
+        sb.Append("else:\n");
+        sb.Append("    import math\n");
+        sb.Append("    bpy.context.view_layer.update()\n");
+        sb.Append("    cs = [o.matrix_world @ Vector(c) for c in o.bound_box]\n");
+        sb.Append("    lo = min(c[2] for c in cs); hi = max(c[2] for c in cs)\n");
+        sb.Append($"    d, x, y, R, depth = {(top ? 1 : -1)}, {N(x)}, {N(y)}, {N(radius)}, {N(depth)}\n");
+        sb.Append("    if depth >= hi - lo:\n");
+        sb.Append("        print(\"ERROR: the part is only \" + str(round(hi - lo, 4)) + \" thick: a nut trap \" + str(round(depth, 4)) + \" deep would cut through it\")\n");
+        sb.Append("    else:\n");
+        sb.Append("        inv = o.matrix_world.inverted()\n");
+        sb.Append("        dloc = (inv.to_3x3() @ Vector((0.0, 0.0, -float(d)))).normalized()\n");
+        sb.Append("        far = (hi + 1.0) if d > 0 else (lo - 1.0)\n");
+        sb.Append("        pts = [(x, y)] + [(x + 0.9 * R * math.cos(math.radians(60 * k)), y + 0.9 * R * math.sin(math.radians(60 * k))) for k in range(6)]\n");
+        sb.Append("        hits = []\n");
+        sb.Append("        for px, py in pts:\n");
+        sb.Append("            ok, loc_hit, nrm_hit, idx_hit = o.ray_cast(inv @ Vector((px, py, far)), dloc)\n");
+        sb.Append("            if ok: hits.append((o.matrix_world @ loc_hit)[2])\n");
+        sb.Append("        if not hits:\n");
+        sb.Append($"            print(\"ERROR: the nut trap does not touch the {face} face: there is no surface of the object under (\" + str(round(x, 4)) + \", \" + str(round(y, 4)) + \")\")\n");
+        sb.Append("        else:\n");
+        sb.Append("            plane = max(hits) if d > 0 else min(hits)\n");
+        sb.Append("            ov = min(0.2, (hi - lo) * 0.25)\n");
+        sb.Append("            bpy.ops.mesh.primitive_cylinder_add(vertices=6, radius=R, depth=depth + ov, location=(x, y, plane + d * (ov - depth) / 2), rotation=(0.0, 0.0, math.radians(90)))\n");
+        sb.Append("            c = bpy.context.active_object\n");
+        sb.Append("            bad0, vol0, n0 = bm_check(o)\n");
+        sb.Append("            err = bm_boolean(o, c, 'DIFFERENCE')\n");
+        sb.Append("            cm = c.data\n");
+        sb.Append("            bpy.data.objects.remove(c, do_unlink=True)\n");
+        sb.Append("            bpy.data.meshes.remove(cm)\n");
+        sb.Append("            bpy.context.view_layer.objects.active = o\n");
+        sb.Append("            if err:\n                print(\"ERROR: \" + err)\n");
+        sb.Append("            else:\n");
+        sb.Append("                bad, vol, n = bm_check(o)\n");
+        sb.Append("                full = 2.598076211353316 * R * R * depth\n");
+        sb.Append("                if abs(vol - vol0) < max(1e-6 * abs(vol0), 1e-9):\n");
+        sb.Append("                    print(\"ERROR: nothing was cut: the nut trap does not overlap the part\")\n");
+        sb.Append("                else:\n");
+        sb.Append("                    note = (\" (warning: the nut trap only partly overlaps the part: it removed %.1f of the %.1f mm3 a whole trap removes; check x and y)\" % (vol0 - vol, full)) if (vol0 - vol) < 0.5 * full else \"\"\n");
+        sb.Append($"                    print(\"OK \" + o.name + \" nut trap {size} ({N(across)} across the flats, {N(depth)} deep) at (\" + str(round(x, 4)) + \", \" + str(round(y, 4)) + \") in the {face} face, which is at z=\" + str(round(plane, 4)) + \" vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)) + note)");
+        return (sb.ToString(), null);
     }
 
     /// <summary>The same arguments with "axis" set (drill_hole_x / drill_hole_y reuse the code of drill_hole).</summary>

@@ -277,6 +277,40 @@ try:
     expect_error("pad_right outside the face is refused", call("pad_right", name="ct_side4", y1=5000, y2=5010, z1=-5, z2=5, height=3))
     expect_error("pocket_front with a rectangle of no size is refused", call("pocket_front", name="ct_side4", x1=0, x2=0, z1=-3, z2=3, depth=1))
     check("the refused side calls changed nothing", volume("ct_side4"), keep, tol=1e-9)
+    # nut_trap / nut_trap_bottom: the hexagonal recess for a nut. M3 nut: 5.5 across the flats, 2.4 thick (ISO 4032) + 0.2 of room, so the
+    # recess is 5.7 across the flats and 2.6 deep. A regular hexagon has area (3 sqrt(3) / 2) R^2 with R = across / sqrt(3).
+    import math
+    across, nut_depth = 5.7, 2.6
+    R = across / math.sqrt(3)
+    hexvol = 1.5 * math.sqrt(3) * R * R * nut_depth
+    make("ct_nut", width=40, depth=40, height=10, x=0, y=2000, z=0)
+    said = call("nut_trap", name="ct_nut", size="M3", x=0, y=2000)
+    check("nut_trap M3 removes exactly one hexagon 5.7 across the flats and 2.6 deep", volume("ct_nut"), 16000 - hexvol, tol=1e-6)
+    ok_said = said.startswith("OK") and "5.7 across the flats" in said and "warning" not in said
+    fails += 0 if ok_said else 1
+    print(f"{'PASS' if ok_said else 'FAIL'}  the answer says what was cut: {said[:120]}")
+    h = ray_hit("ct_nut", (0, 2000, 1000), (0, 0, -1))
+    check("the recess floor is at z = 5 - 2.6 = 2.4", h[2] if h else float("nan"), 2.4, tol=1e-4)
+    h = ray_hit("ct_nut", (0, 2000, 4), (0, 1, 0))      # from inside the recess, towards +Y: the FLAT edge, half the width across the flats
+    check("the flat edge is parallel to X: the wall along Y is 2.85 from the centre", (h[1] - 2000) if h else float("nan"), across / 2, tol=1e-4)
+    h = ray_hit("ct_nut", (0, 2000, 4), (1, 0, 0))      # towards +X: the corner of the hexagon
+    check("the corner is on the X axis: the wall along X is 3.291 from the centre", h[0] if h else float("nan"), R, tol=1e-4)
+    make("ct_nutb", width=40, depth=40, height=10, x=0, y=2100, z=0)
+    call("nut_trap_bottom", name="ct_nutb", size="M3", x=0, y=2100)
+    check("nut_trap_bottom M3 removes the same hexagon", volume("ct_nutb"), 16000 - hexvol, tol=1e-6)
+    h = ray_hit("ct_nutb", (0, 2100, -1000), (0, 0, 1))
+    check("the bottom recess floor is at z = -5 + 2.6 = -2.4", h[2] if h else float("nan"), -2.4, tol=1e-4)
+    make("ct_nut2", width=40, depth=40, height=10, x=0, y=2200, z=0)
+    call("nut_trap", name="ct_nut2", size="M4", x=0, y=2200)
+    check("nut_trap M4: 7.0 + 0.2 across the flats, 3.2 + 0.2 deep", volume("ct_nut2"), 16000 - 1.5 * math.sqrt(3) * (7.2 / math.sqrt(3)) ** 2 * 3.4, tol=1e-6)
+    make("ct_thin", width=40, depth=40, height=2, x=0, y=2300, z=0)
+    expect_error("a part thinner than the recess is refused (it would cut through)", call("nut_trap", name="ct_thin", size="M3", x=0, y=2300))
+    expect_error("an unknown screw size is refused", call("nut_trap", name="ct_nut", size="M9", x=0, y=2000))
+    expect_error("a nut trap outside the part is refused", call("nut_trap", name="ct_nut", size="M3", x=500, y=2000))
+    graze = call("nut_trap", name="ct_nut", size="M3", x=22, y=2000)       # centre outside: only a sliver of the hexagon is inside
+    ok_graze = graze.startswith("OK") and "warning" in graze
+    fails += 0 if ok_graze else 1
+    print(f"{'PASS' if ok_graze else 'FAIL'}  a nut trap that only grazes the part warns: {graze[-110:]}")
 finally:
     rd = rt.round_dir(here, "check-tools") if (args.trace or args.save_blend is not None) else None
     shots = rt.capture(args.blender_mcp, rd, grid=True) if rd else {}   # the visual proof, made by Blender, BEFORE the parts are deleted

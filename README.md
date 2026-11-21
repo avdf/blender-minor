@@ -50,7 +50,13 @@ as `roxa`) or `#RRGGBB`.
 | `array_object` | `name` (required), `count_x`, `count_y`, `gap`, `apply` | repeats an object in a grid with Blender's Array modifier, for printing many copies of a small part so each layer can cool; merged into the object by default (`apply`), so `check_mesh` and `export_stl` see every copy; max 400 copies |
 | `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | a box with exact sizes (x, y, z = its center) |
 | `set_dimensions` | `name` (required), `x`, `y`, `z` | sets the exact size of an existing object |
-| `boolean_op` | `target`, `cutter` (required), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT of two objects; **transactional** (see below) |
+| `pad` | `name`, `height` (required), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | adds material on a face, like FreeCAD's Pad: a rectangle is raised by `height`. The face plane is the **real surface under the rectangle** (rays), so it also works on a stepped part; refuses a rectangle that touches nothing and never answers OK when nothing changed |
+| `pocket` | `name`, `depth` (required), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | cuts a rectangular recess into a face, like FreeCAD's Pocket; same face rules as `pad` |
+| `mirror_object` | `name` (required), `axis`, `at`, `merge`, `apply` | Blender's Mirror modifier: draw one half, get the other; `at` = where the plane is (default: the object origin) |
+| `join` | `target`, `other` (required) | union: `other` is merged into `target` and removed; **transactional** |
+| `subtract` | `target`, `cutter` (required) | difference: the cutter is taken out of `target`, then deleted; **transactional** |
+| `intersect` | `target`, `other` (required) | keeps only what the two have in common; **transactional** |
+| `boolean_op` | `target`, `cutter` (required), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT of two objects, with the operation as a parameter; **transactional** (see below). For small models prefer `join` / `subtract` / `intersect`: the *tool* carries the operation, so the model never has to choose a value |
 | `drill_hole` | `name`, `diameter` (required), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | a round hole of an exact diameter, through or blind, along X, Y or Z, with an optional counterbore (recess for a screw head) or 90 degree countersink |
 | `screw_hole` | `name` (required), `size` (M2 to M8), `kind`, `x`, `y`, `z`, `axis`, `side`, `depth` | a hole for a standard screw from a table: `clearance`, `counterbore`, `countersunk` or `insert` (blind hole for a heat-set insert) |
 | `set_color` | `name`, `color` (required), `roughness`, `specular` | changes the material of an existing object |
@@ -160,9 +166,11 @@ without an `OK`, always pass `color` when one is mentioned, copy object names ex
 
 For **parts with exact sizes and holes** (3D printing, laser) there is a shorter prompt that lists only the tools that
 job needs: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt). It matches the `--allow` list of the
-[stdio bridge](#using-it-from-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `boolean_op`, `move_object`,
-`array_object`, `list_objects`, `check_mesh`, `export_stl`), so the model sees the same short tool list that the prompt
-describes.
+[stdio bridge](#using-it-from-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `pad`, `pocket`, `array_object`,
+`list_objects`, `check_mesh`, `export_stl`), so the model sees the same short tool list that the prompt describes. Nine
+tools on purpose: every tool costs prompt tokens (about 2300 for eight tools plus the prompt, minutes on an old CPU), and a
+tool the prompt does not describe only confuses a small model. Add `join`, `subtract`, `mirror_object` or `move_object` to
+both the `--allow` list and the prompt when a job needs them.
 
 ## When Blender changes its API: file override
 
@@ -210,6 +218,15 @@ python3 -I eval/evaluate_model.py --label my-model --system prompts/system.en.tx
 python3 -I eval/evaluate_model.py --label my-model --system prompts/system.en.txt --lang en  # the same 12 requests in English
 ```
 
+Two more checks live in `eval/`:
+
+- `eval/evaluate_parts.py`: the same idea for **parts**. A model is asked for boxes with holes, a raised strip (`pad`) and a recess
+  (`pocket`); each part is read back with `check_mesh` and its size **and volume** are compared with the hand-made numbers. Cases
+  whose tools are not in the model's list are skipped. `python3 -I eval/evaluate_parts.py --url http://host:9931 --label my-model`
+- `eval/check_tools.py`: calls the tools **without a model** and checks each result against a worked-out volume (pad, pocket on a
+  stepped part, mirror, join, subtract, intersect, array). It removes everything it creates, so it is safe to run on a Blender
+  with your own work open. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`
+
 ## Security
 
 - The API has **no authentication**. It listens on `127.0.0.1` by default. `BLENDER_MINOR_HOST=0.0.0.0` lets anyone who
@@ -229,7 +246,8 @@ Aimed at modeling parts for 3D printing by conversation, with exact sizes and ho
 - [x] counterbore and countersink in `drill_hole`, and `screw_hole` with a standard-size table
 - [x] `repair_mesh`, `export_stl` (file name only, fixed export folder), `set_units`
 - [x] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
-- [ ] fillets (`bevel_object` on chosen edges), rectangular pockets and slots, patterns of holes
+- [x] `array_object` (copies in a grid, for printing many small parts), `pad` / `pocket` (rectangles on a face), `mirror_object`, and `join` / `subtract` / `intersect`
+- [ ] fillets (`bevel_object` on chosen edges), round and slotted pockets, patterns of holes
 - [ ] a threaded-hole option and a configurable insert pocket depth per material
 
 Ideas and pull requests are welcome.

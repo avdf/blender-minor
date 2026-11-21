@@ -66,6 +66,35 @@ public static class OpScripts
              new("gap", "number", "space between copies (same unit as the scene), default 2"),
              new("apply", "boolean", "merge the copies into the object, default true")],
             ["name"]),
+        new("pad",
+            "Add material on a face of an existing object, like FreeCAD's Pad: a rectangle on the face is raised by height. axis + side choose the face (Z and + is the top, the default). x1, x2, y1, y2, z1, z2 are the corners of the rectangle: give only the two pairs that lie on that face (face Z: x and y; face X: y and z; face Y: x and z). Safe: a broken result leaves the object unchanged.",
+            [NameProp, new("x1", "number", "rectangle corner"), new("x2", "number", "opposite corner"), new("y1", "number", "rectangle corner"), new("y2", "number", "opposite corner"),
+             new("z1", "number", "rectangle corner"), new("z2", "number", "opposite corner"), new("height", "number", "how far it rises from the face"),
+             new("axis", "string", "face normal: X, Y or Z (default Z)"), new("side", "string", "+ (default) or -: which face of that axis")],
+            ["name", "height"]),
+        new("pocket",
+            "Cut a rectangular recess into a face of an existing object, like FreeCAD's Pocket: a rectangle on the face is cut depth deep. axis + side choose the face (Z and + is the top, the default). x1, x2, y1, y2, z1, z2 are the corners of the rectangle: give only the two pairs that lie on that face (face Z: x and y; face X: y and z; face Y: x and z). Safe: a broken result leaves the object unchanged.",
+            [NameProp, new("x1", "number", "rectangle corner"), new("x2", "number", "opposite corner"), new("y1", "number", "rectangle corner"), new("y2", "number", "opposite corner"),
+             new("z1", "number", "rectangle corner"), new("z2", "number", "opposite corner"), new("depth", "number", "how deep it cuts into the object"),
+             new("axis", "string", "face normal: X, Y or Z (default Z)"), new("side", "string", "+ (default) or -: which face of that axis")],
+            ["name", "depth"]),
+        new("mirror_object",
+            "Mirror an existing object across a plane (Blender's Mirror modifier): draw one half, get the other. axis is the axis the plane is perpendicular to (X default). at = where the plane is (default: the object's own origin). merge welds the vertices that meet on the plane, default true. By default the mirror is applied, so check_mesh and export_stl see both halves.",
+            [NameProp, new("axis", "string", "X, Y or Z (default X)"), new("at", "number", "position of the mirror plane along that axis (default: the object origin)"),
+             new("merge", "boolean", "weld the vertices on the plane, default true"), new("apply", "boolean", "merge the halves into the object, default true")],
+            ["name"]),
+        new("join",
+            "Join two existing objects into one (union). The other object is merged into the target and removed. Safe: if the result is a broken mesh the target is left unchanged and an error is returned.",
+            [new("target", "string", "name of the object that is kept"), new("other", "string", "name of the object to join into it")],
+            ["target", "other"]),
+        new("subtract",
+            "Cut one existing object out of another (difference): the cutter is removed from the target, then the cutter is deleted. Safe: if the result is a broken mesh the target is left unchanged and an error is returned.",
+            [new("target", "string", "name of the object that is kept and cut"), new("cutter", "string", "name of the object that does the cutting")],
+            ["target", "cutter"]),
+        new("intersect",
+            "Keep only the part that two existing objects have in common (intersection). The other object is removed. Safe: if the result is a broken mesh the target is left unchanged and an error is returned.",
+            [new("target", "string", "name of the object that is kept"), new("other", "string", "name of the other object")],
+            ["target", "other"]),
         new("boolean_op",
             "Combine two existing objects: UNION adds them, DIFFERENCE cuts the cutter out of the target, INTERSECT keeps only the overlap. The result replaces the target. If the result is a broken mesh the target is left unchanged and an error is returned.",
             [new("target", "string", "name of the object that is kept and modified"), new("cutter", "string", "name of the other object"),
@@ -135,6 +164,12 @@ public static class OpScripts
         "move_object" => WithObject(args, "name", (lit, a) => BuildMove(lit, a)),
         "bevel_object" => WithObject(args, "name", (lit, a) => BuildBevel(lit, a)),
         "array_object" => WithObject(args, "name", (lit, a) => BuildArray(lit, a)),
+        "pad" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, a, additive: true)),
+        "pocket" => WithObject(args, "name", (lit, a) => BuildFaceRect(lit, a, additive: false)),
+        "mirror_object" => WithObject(args, "name", (lit, a) => BuildMirror(lit, a)),
+        "join" => BuildBoolean(args, "UNION", "other"),
+        "subtract" => BuildBoolean(args, "DIFFERENCE", "cutter"),
+        "intersect" => BuildBoolean(args, "INTERSECT", "other"),
         "check_mesh" => WithObject(args, "name", (lit, a) => BuildCheck(lit)),
         "repair_mesh" => WithObject(args, "name", (lit, a) => BuildRepair(lit, a)),
         "delete_object" => WithObject(args, "name", (lit, a) => BuildDelete(lit)),
@@ -400,6 +435,151 @@ public static class OpScripts
         return (sb.ToString(), null);
     }
 
+    /// <summary>pad (additive) and pocket (subtractive): a rectangle on one face of an object, raised or cut. Same result as Ctrl+R,
+    /// selecting the new face and extruding it, but with numbers only: a box is built over (pad) or into (pocket) the face and
+    /// joined or cut with the TRANSACTIONAL boolean, so a bad result leaves the object as it was. The face plane comes from the
+    /// object's bounding box in world space (axis-aligned objects). The box sticks a little into the part (pad) or out of the face
+    /// (pocket) so the faces never coincide.</summary>
+    private static (string? Script, string? Error) BuildFaceRect(string lit, JsonElement args, bool additive)
+    {
+        string tool = additive ? "pad" : "pocket", sizeKey = additive ? "height" : "depth";
+        string axis = (ShapeScripts.Text(args, "axis") ?? "Z").ToUpperInvariant();
+        if (axis is not ("X" or "Y" or "Z")) return (null, $"Invalid axis '{axis}'. Use X, Y or Z.");
+        int ai = axis[0] - 'X';
+        string sideText = (ShapeScripts.Text(args, "side") ?? "+").ToLowerInvariant();
+        int d = sideText switch { "+" or "top" or "pos" or "positive" => 1, "-" or "bottom" or "neg" or "negative" => -1, _ => 0 };
+        if (d == 0) return (null, $"Invalid side '{sideText}'. Use + or - (which face of the {axis} axis).");
+        if (!ShapeScripts.Has(args, sizeKey)) return (null, $"Argument '{sizeKey}' is required.");
+        var (size, es) = ShapeScripts.Number(args, sizeKey, 0, 0.001, 10000); if (es is not null) return (null, es);
+
+        // the two axes that lie on the face, and the four keys that give the rectangle
+        int ia = ai == 0 ? 1 : 0, ib = ai == 2 ? 1 : 2;
+        string[] keys = ai switch
+        {
+            0 => ["y1", "y2", "z1", "z2"],
+            1 => ["x1", "x2", "z1", "z2"],
+            _ => ["x1", "x2", "y1", "y2"],
+        };
+        var v = new double[4];
+        for (int i = 0; i < 4; i++)
+        {
+            if (!ShapeScripts.Has(args, keys[i]))
+                return (null, $"For a face on the {axis} axis give {keys[0]}, {keys[1]}, {keys[2]} and {keys[3]} (the corners of the rectangle on the face).");
+            var (val, ev) = ShapeScripts.Number(args, keys[i], 0, -CoordLimit, CoordLimit); if (ev is not null) return (null, ev);
+            v[i] = val;
+        }
+        double a1 = Math.Min(v[0], v[1]), a2 = Math.Max(v[0], v[1]), b1 = Math.Min(v[2], v[3]), b2 = Math.Max(v[2], v[3]);
+        if (a2 - a1 < 1e-6 || b2 - b1 < 1e-6) return (null, $"The rectangle has no size: {keys[0]} and {keys[1]}, and {keys[2]} and {keys[3]}, must be different.");
+
+        var sb = new StringBuilder(PyHelpers).Append('\n');
+        sb.Append($"o = bpy.data.objects.get({lit})\n");
+        sb.Append("if o is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("elif o.type != 'MESH':\n");
+        sb.Append($"    print(\"ERROR: \" + o.name + \" is \" + o.type + \"; {tool} needs a MESH object\")\n");
+        sb.Append("else:\n");
+        sb.Append("    bpy.context.view_layer.update()\n");
+        sb.Append("    cs = [o.matrix_world @ Vector(c) for c in o.bound_box]\n");
+        sb.Append("    lo = [min(c[i] for c in cs) for i in range(3)]\n");
+        sb.Append("    hi = [max(c[i] for c in cs) for i in range(3)]\n");
+        sb.Append($"    ai, ia, ib, d = {ai}, {ia}, {ib}, {d}\n");
+        sb.Append($"    a1, a2, b1, b2, size = {N(a1)}, {N(a2)}, {N(b1)}, {N(b2)}, {N(size)}\n");
+        // The face plane is the REAL surface under the rectangle (rays cast along the axis at the centre and the four corners),
+        // not the top of the whole bounding box: after a pad the box top is higher than the surface a pocket must start from.
+        sb.Append("    inv = o.matrix_world.inverted()\n");
+        sb.Append("    dirv = Vector((0.0, 0.0, 0.0)); dirv[ai] = -float(d)\n");
+        sb.Append("    dloc = (inv.to_3x3() @ dirv).normalized()\n");
+        sb.Append("    far = (hi[ai] + 1.0) if d > 0 else (lo[ai] - 1.0)\n");
+        sb.Append("    eps = min(a2 - a1, b2 - b1) * 0.05\n");
+        sb.Append("    hits = []\n");
+        sb.Append("    for fa, fb in ((0.5, 0.5), (0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)):\n");
+        sb.Append("        p = [0.0, 0.0, 0.0]\n");
+        sb.Append("        p[ia] = a1 + (a2 - a1) * fa + (eps if fa == 0.0 else (-eps if fa == 1.0 else 0.0))\n");
+        sb.Append("        p[ib] = b1 + (b2 - b1) * fb + (eps if fb == 0.0 else (-eps if fb == 1.0 else 0.0))\n");
+        sb.Append("        p[ai] = far\n");
+        sb.Append("        ok, loc_hit, nrm_hit, idx_hit = o.ray_cast(inv @ Vector(p), dloc)\n");
+        sb.Append("        if ok: hits.append((o.matrix_world @ loc_hit)[ai])\n");
+        sb.Append("    no_hit = not hits\n");
+        sb.Append("    plane = (max(hits) if d > 0 else min(hits)) if hits else 0.0\n");
+        sb.Append("    ov = min(0.2, (hi[ai] - lo[ai]) * 0.25)\n");
+        sb.Append(additive
+            ? "    length = size + ov\n    mid = plane + d * (size - ov) / 2\n"
+            : "    length = size + ov\n    mid = plane + d * (ov - size) / 2\n");
+        sb.Append("    dims = [0.0, 0.0, 0.0]; loc = [0.0, 0.0, 0.0]\n");
+        sb.Append("    dims[ai] = length; loc[ai] = mid\n");
+        sb.Append("    dims[ia] = a2 - a1; loc[ia] = (a1 + a2) / 2\n");
+        sb.Append("    dims[ib] = b2 - b1; loc[ib] = (b1 + b2) / 2\n");
+        sb.Append("    outside = a1 < lo[ia] - 1e-6 or a2 > hi[ia] + 1e-6 or b1 < lo[ib] - 1e-6 or b2 > hi[ib] + 1e-6\n");
+        sb.Append("    bpy.ops.mesh.primitive_cube_add(size=1, location=tuple(loc))\n");
+        sb.Append("    c = bpy.context.active_object\n");
+        sb.Append("    c.scale = tuple(dims)\n");
+        sb.Append("    bad0, vol0, n0 = bm_check(o)\n");
+        sb.Append($"    err = ('the rectangle does not touch the ' + 'XYZ'[ai] + ('+' if d > 0 else '-') + ' face: there is no surface of the object under it' if no_hit else bm_boolean(o, c, '{(additive ? "UNION" : "DIFFERENCE")}'))\n");
+        sb.Append("    cm = c.data\n");
+        sb.Append("    bpy.data.objects.remove(c, do_unlink=True)\n");
+        sb.Append("    bpy.data.meshes.remove(cm)\n");
+        sb.Append("    bpy.context.view_layer.objects.active = o\n");
+        sb.Append("    if err:\n        print(\"ERROR: \" + err)\n");
+        sb.Append("    else:\n");
+        sb.Append("        bad, vol, n = bm_check(o)\n");
+        // A tool that changed nothing must not say OK: a small model would believe the part was modified.
+        sb.Append("        if abs(vol - vol0) < 1e-9:\n");
+        sb.Append($"            print(\"ERROR: nothing was {(additive ? "added" : "cut")}: the rectangle does not overlap the part at that face (the surface there is at \" + str(round(plane, 4)) + \")\")\n");
+        sb.Append("        else:\n");
+        sb.Append($"            note = \" (note: the rectangle goes beyond the face)\" if outside else \"\"\n");
+        sb.Append($"            print(\"OK \" + o.name + \" {tool} \" + 'XYZ'[ai] + ('+' if d > 0 else '-') + \" face at \" + str(round(plane, 4)) + \", {sizeKey} \" + str(size) + \" vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)) + note)");
+        return (sb.ToString(), null);
+    }
+
+    /// <summary>Mirror modifier across a plane perpendicular to X, Y or Z. The plane is the object's origin, or an Empty placed at "at".</summary>
+    private static (string? Script, string? Error) BuildMirror(string lit, JsonElement args)
+    {
+        string axis = (ShapeScripts.Text(args, "axis") ?? "X").ToUpperInvariant();
+        if (axis is not ("X" or "Y" or "Z")) return (null, $"Invalid axis '{axis}'. Use X, Y or Z.");
+        int ai = axis[0] - 'X';
+        bool hasAt = ShapeScripts.Has(args, "at");
+        double at = 0;
+        if (hasAt) { var (av, ea) = ShapeScripts.Number(args, "at", 0, -CoordLimit, CoordLimit); if (ea is not null) return (null, ea); at = av; }
+        var (merge, em) = ReadBool(args, "merge", true); if (em is not null) return (null, em);
+        var (apply, ep) = ReadBool(args, "apply", true); if (ep is not null) return (null, ep);
+
+        var sb = new StringBuilder(PyHelpers).Append('\n');
+        sb.Append($"o = bpy.data.objects.get({lit})\n");
+        sb.Append("if o is None:\n").Append(Missing(lit)).Append('\n');
+        sb.Append("elif o.type != 'MESH':\n");
+        sb.Append("    print(\"ERROR: \" + o.name + \" is \" + o.type + \"; mirror_object needs a MESH object\")\n");
+        sb.Append("else:\n");
+        sb.Append("    for old in [m for m in o.modifiers if m.name == 'BM_Mirror']: o.modifiers.remove(old)\n");
+        sb.Append("    m = o.modifiers.new('BM_Mirror', 'MIRROR')\n");
+        sb.Append($"    m.use_axis = ({(ai == 0 ? "True" : "False")}, {(ai == 1 ? "True" : "False")}, {(ai == 2 ? "True" : "False")})\n");
+        sb.Append($"    m.use_mirror_merge = {(merge ? "True" : "False")}\n");
+        sb.Append("    m.merge_threshold = 0.001\n");
+        sb.Append("    plane = None\n");
+        if (hasAt)
+        {
+            sb.Append("    plane = bpy.data.objects.new('_bm_mirror_plane', None)\n");
+            sb.Append("    bpy.context.scene.collection.objects.link(plane)\n");
+            sb.Append($"    loc = [0.0, 0.0, 0.0]; loc[{ai}] = {N(at)}\n");
+            sb.Append("    plane.location = tuple(loc)\n");
+            sb.Append("    m.mirror_object = plane\n");
+        }
+        if (apply)
+        {
+            sb.Append("    with bpy.context.temp_override(object=o, active_object=o, selected_objects=[o]):\n");
+            sb.Append("        for mm in list(o.modifiers): bpy.ops.object.modifier_apply(modifier=mm.name)\n");
+        }
+        sb.Append("    if plane is not None: bpy.data.objects.remove(plane, do_unlink=True)\n");
+        sb.Append("    bpy.context.view_layer.update()\n");
+        sb.Append("    size = tuple(round(x, 3) for x in o.dimensions)\n");
+        sb.Append($"    txt = \"OK \" + o.name + \" mirrored across {axis}\" + (\" at {N(at)}\" if {(hasAt ? "True" : "False")} else \" at its origin\") + \", size \" + str(size)\n");
+        sb.Append($"    if {(apply ? "True" : "False")}:\n");
+        sb.Append("        bad, vol, n = bm_check(o)\n");
+        sb.Append("        txt += \" volume=%.4f non_manifold_edges=%d\" % (vol, bad)\n");
+        sb.Append("    else:\n");
+        sb.Append("        txt += \" (modifier kept, not applied yet)\"\n");
+        sb.Append("    print(txt)");
+        return (sb.ToString(), null);
+    }
+
     private static (string? Script, string? Error) BuildCheck(string lit)
     {
         var sb = new StringBuilder(PyHelpers).Append('\n');
@@ -532,12 +712,14 @@ public static class OpScripts
         ["intersect"] = "INTERSECT", ["intersection"] = "INTERSECT", ["common"] = "INTERSECT",
     };
 
-    private static (string? Script, string? Error) BuildBoolean(JsonElement args)
+    /// <summary>fixedOp is set by join / subtract / intersect: the TOOL carries the operation, so a small model never has to pick
+    /// UNION / DIFFERENCE / INTERSECT from a parameter. boolean_op keeps the parameter for clients that want it.</summary>
+    private static (string? Script, string? Error) BuildBoolean(JsonElement args, string? fixedOp = null, string otherKey = "cutter")
     {
         var (tl, et) = NameLiteral(args, "target"); if (et is not null) return (null, et);
-        var (cl, ec) = NameLiteral(args, "cutter"); if (ec is not null) return (null, ec);
-        string op = "DIFFERENCE";
-        if (ShapeScripts.Has(args, "operation"))
+        var (cl, ec) = NameLiteral(args, otherKey); if (ec is not null) return (null, ec);
+        string op = fixedOp ?? "DIFFERENCE";
+        if (fixedOp is null && ShapeScripts.Has(args, "operation"))
         {
             string given = ShapeScripts.Text(args, "operation") ?? "";
             if (!OperationNames.TryGetValue(given, out var mapped))

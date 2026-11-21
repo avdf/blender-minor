@@ -50,7 +50,13 @@ feminino, como `roxa`) ou `#RRGGBB`.
 | `array_object` | `name` (obrigatório), `count_x`, `count_y`, `gap`, `apply` | repete um objeto em grade com o modificador Array do Blender, para imprimir várias cópias de uma peça pequena e cada camada ter tempo de esfriar; por padrão as cópias viram parte do objeto (`apply`), então `check_mesh` e `export_stl` enxergam todas; no máximo 400 cópias |
 | `create_box` | `name`, `width`, `depth`, `height`, `x`, `y`, `z`, `color` | uma caixa com medidas exatas (x, y, z = o centro dela) |
 | `set_dimensions` | `name` (obrigatório), `x`, `y`, `z` | define o tamanho exato de um objeto existente |
-| `boolean_op` | `target`, `cutter` (obrigatórios), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT de dois objetos; **transacional** (veja abaixo) |
+| `pad` | `name`, `height` (obrigatórios), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | acrescenta material numa face, como o Pad do FreeCAD: um retângulo sobe `height`. O plano da face é a **superfície real sob o retângulo** (raios), então funciona também em peça com degrau; recusa um retângulo que não toca em nada e nunca responde OK quando nada mudou |
+| `pocket` | `name`, `depth` (obrigatórios), `x1`, `x2`, `y1`, `y2`, `z1`, `z2`, `axis`, `side` | corta um rebaixo retangular numa face, como o Pocket do FreeCAD; mesmas regras de face do `pad` |
+| `mirror_object` | `name` (obrigatório), `axis`, `at`, `merge`, `apply` | modificador Mirror do Blender: desenhe uma metade e a outra aparece; `at` = onde fica o plano (padrão: a origem do objeto) |
+| `join` | `target`, `other` (obrigatórios) | união: o `other` entra no `target` e some; **transacional** |
+| `subtract` | `target`, `cutter` (obrigatórios) | diferença: o cortador sai do `target` e depois é apagado; **transacional** |
+| `intersect` | `target`, `other` (obrigatórios) | fica só com o que os dois têm em comum; **transacional** |
+| `boolean_op` | `target`, `cutter` (obrigatórios), `operation`, `delete_cutter` | UNION / DIFFERENCE / INTERSECT de dois objetos, com a operação como parâmetro; **transacional** (veja abaixo). Para modelos pequenos prefira `join` / `subtract` / `intersect`: quem carrega a operação é a *ferramenta*, então o modelo nunca precisa escolher um valor |
 | `drill_hole` | `name`, `diameter` (obrigatórios), `x`, `y`, `z`, `axis`, `side`, `depth`, `clearance`, `counterbore_diameter`, `counterbore_depth`, `countersink_diameter`, `segments` | furo redondo de diâmetro exato, passante ou cego, nos eixos X, Y ou Z, com **rebaixo** opcional (para a cabeça do parafuso) ou **escareado** de 90° |
 | `screw_hole` | `name` (obrigatório), `size` (M2 a M8), `kind`, `x`, `y`, `z`, `axis`, `side`, `depth` | furo para um parafuso padrão, de uma tabela: `clearance` (passante), `counterbore` (rebaixo), `countersunk` (escareado) ou `insert` (furo cego para inserto de rosca a quente) |
 | `set_color` | `name`, `color` (obrigatórios), `roughness`, `specular` | troca o material de um objeto existente |
@@ -140,9 +146,11 @@ certo sem um `OK`, sempre passar `color` quando uma cor for citada, copiar os no
 
 Para **peças com medida exata e furos** (impressão 3D, laser) existe um prompt mais curto que lista só as ferramentas
 desse trabalho: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt) (em inglês). Ele combina com a lista
-`--allow` da [ponte stdio](#usando-com-o-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `boolean_op`, `move_object`,
+`--allow` da [ponte stdio](#usando-com-o-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `pad`, `pocket`,
 `array_object`, `list_objects`, `check_mesh`, `export_stl`), então o modelo enxerga a mesma lista curta que o prompt
-descreve.
+descreve. São nove ferramentas de propósito: cada ferramenta custa tokens de prompt (uns 2300 para oito ferramentas mais o
+prompt, minutos numa CPU velha), e uma ferramenta que o prompt não descreve só confunde um modelo pequeno. Acrescente
+`join`, `subtract`, `mirror_object` ou `move_object` na lista `--allow` **e** no prompt quando o trabalho precisar.
 
 ## Quando o Blender mudar a API: override por arquivo
 
@@ -191,6 +199,16 @@ python3 -I eval/evaluate_model.py --label meu-modelo --system prompts/system.pt-
 python3 -I eval/evaluate_model.py --label meu-modelo --system prompts/system.en.txt --lang en     # os mesmos 12 pedidos em inglês
 ```
 
+Há mais duas verificações em `eval/`:
+
+- `eval/evaluate_parts.py`: a mesma ideia para **peças**. Pede ao modelo caixas com furos, uma faixa levantada (`pad`) e um
+  rebaixo (`pocket`); cada peça é lida de volta com `check_mesh` e o tamanho **e o volume** são comparados com os números feitos
+  à mão. Os casos cujas ferramentas não estão na lista do modelo são pulados.
+  `python3 -I eval/evaluate_parts.py --url http://host:9931 --label meu-modelo`
+- `eval/check_tools.py`: chama as ferramentas **sem modelo** e confere cada resultado com um volume calculado (pad, pocket em
+  peça com degrau, mirror, join, subtract, intersect, array). Ele apaga tudo o que cria, então é seguro rodar num Blender com
+  trabalho seu aberto. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`
+
 ## Segurança
 
 - A API **não tem autenticação**. Por padrão escuta só em `127.0.0.1`. `BLENDER_MINOR_HOST=0.0.0.0` deixa qualquer um que
@@ -210,7 +228,8 @@ Com o objetivo de modelar peças para impressão 3D por conversa, com medidas ex
 - [x] rebaixo e escareado no `drill_hole`, e o `screw_hole` com tabela de medidas padrão
 - [x] `repair_mesh`, `export_stl` (só nome de arquivo, pasta de exportação fixa), `set_units`
 - [x] `create_plane`, `create_icosphere`, `set_color`, `delete_object`
-- [ ] filetes (`bevel_object` em arestas escolhidas), rasgos e bolsões retangulares, padrões de furos
+- [x] `array_object` (cópias em grade, para imprimir várias peças pequenas), `pad` / `pocket` (retângulos numa face), `mirror_object`, e `join` / `subtract` / `intersect`
+- [ ] filetes (`bevel_object` em arestas escolhidas), bolsões redondos e rasgos, padrões de furos
 - [ ] opção de furo roscado e profundidade do inserto configurável por material
 
 Ideias e pull requests são bem-vindos.

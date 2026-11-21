@@ -14,7 +14,7 @@ Options: --blender-mcp (default http://127.0.0.1:9191/, used only to remove the 
 
 Exit code 0 = every case that ran was correct.
 """
-import argparse, hashlib, json, math, os, re, sys, time, urllib.request
+import argparse, hashlib, json, math, os, re, shutil, sys, time, urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # python -I does not add the script folder
 import evaluate_model as ev                                        # reuse its small HTTP helpers
@@ -33,6 +33,10 @@ ap.add_argument("--only", default="", help="run only the cases whose label conta
 ap.add_argument("--show", action="store_true",
                 help="keep the parts in the Blender scene, side by side in a row (each in its own colour), and frame the 3D view at "
                      "the end, so you can look at them in the open Blender window; the previous pt_* objects are removed first")
+ap.add_argument("--save-blend", nargs="*", default=None, metavar="DIR",
+                help="at the end, save a copy of the Blender scene as <evidence name>.blend next to the evidence JSON, and put both the "
+                     ".blend and the JSON in each DIR given (e.g. --save-blend ~/Desktop/tests); the open Blender window keeps its own "
+                     "file. Meant for --show")
 ap.add_argument("--spacing", type=float, default=130.0, help="distance between the parts of the row with --show (default 130)")
 a = ap.parse_args()
 P = a.tool_prefix
@@ -215,4 +219,20 @@ json.dump({"label": a.label, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "llama_
            "passed": passed, "failed": failed, "skipped": skipped, "seconds": round(time.time() - t_start), "rows": rows},
           open(out, "w"), ensure_ascii=False, indent=1)
 print("evidence:", out)
+
+if a.save_blend is not None:   # a copy of the scene, named like the evidence, so a round can be opened and looked at later
+    name = os.path.basename(out)[:-5] + ".blend"
+    for d in a.save_blend:   # the evidence JSON goes with the .blend, so each folder is complete by itself
+        try:
+            os.makedirs(os.path.expanduser(d), exist_ok=True)
+            shutil.copy2(out, os.path.join(os.path.expanduser(d), os.path.basename(out)))
+        except Exception as e:
+            print("evidence: could not copy to", d, "->", e)
+    for path in [os.path.join(here, "results", name)] + [os.path.join(os.path.expanduser(d), name) for d in a.save_blend]:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            run_code("import bpy\nbpy.ops.wm.save_as_mainfile(filepath=%r, copy=True)\nprint('SAVED')" % path)
+            print("blend   :", path, f"({os.path.getsize(path) // 1024} KB)" if os.path.exists(path) else "(NOT FOUND after saving)")
+        except Exception as e:
+            print("blend   : could not save to", path, "->", e)
 sys.exit(1 if failed else 0)

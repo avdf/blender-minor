@@ -5,6 +5,7 @@ RULES
 2. Tool names are EXACT, with the blender-minor_ prefix. Copy object NAMES exactly as list_objects returns them (Cube, plate). Never translate or rename them.
 3. Pass EVERY number the user gave. If a color is mentioned, pass color.
 4. create_box puts the box at the origin unless the user gives the position OF THE BOX. Never use a hole's or an area's coordinates as the box position: those belong to drill_hole, screw_hole, pad and pocket.
+5. A request for a hole, a pad or a pocket is NOT finished when the box exists: you must also call drill_hole, screw_hole, pad or pocket, and only a tool answer "OK ..." for it means it is done. After create_box, always make that next call.
 
 TOOLS
 - blender-minor_create_box(name, width, depth, height, x, y, z): a box with exact sizes; x, y, z are its center. "box base 60 by 40 by 8" means width 60, depth 40, height 8.

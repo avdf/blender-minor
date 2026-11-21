@@ -19,6 +19,7 @@ The model ran on an old 2-core i5 with 5.6 GB of RAM at about 4 tokens/s, so a r
 | R7 | all five cases, final prompt | **5 / 5** (lenient) | **inflated.** The M3 case used `drill_hole` with 3 mm instead of `screw_hole` (19143.5 against 19127.4, a 0.08% difference, under the 1% tolerance) and the `pad` was raised on the **bottom** face after three failed calls (same volume and height as the top face) |
 | R8 | **strict**: tolerance 0.03%, `pad` z range checked, `axis`/`side`/`z1`/`z2` hidden from `pad` and `pocket` | **4 / 5** | two holes 8749.08, 5 mm hole 23882.38, `pad` 2320.0 on the top face (z -1..3) in one call, `pocket` 14800.0 are exact. The M3 case failed: the model created the box and **stopped**, no hole (19200.0) |
 | R9 | same as R8, run with `--show` (parts left in the Blender window in a row) | **4 / 5** | identical to R8 down to the last digit: at temperature 0 the model repeats its choices, so a rerun is a real check. Evidence JSON saved with the prompt hash, the tools the model saw and every call |
+| R10 | rule 5 in the prompt (a request for a hole, pad or pocket is not finished when the box exists); the llama-server now runs as a systemd service from the SSD; direct tool checks run first | **5 / 5** (strict) | all five exact: **M3 hole 19127.483** with `screw_hole` (expected 19127.4), 5 mm hole 23882.38, two holes 8749.08, `pad` 2320.0 on the top face, `pocket` 14800.0. The 17 direct tool checks pass too. First case took 346 s (prompt changed, cold cache), the others 76 to 110 s. At temperature 0 the model repeats its choices, so this is one reproducible run of five fixed cases, not a success rate |
 
 ## What carries over to other small models
 
@@ -30,7 +31,6 @@ The model ran on an old 2-core i5 with 5.6 GB of RAM at about 4 tokens/s, so a r
 
 ## Open
 
-The M3 case is unstable: depending on the prompt the model uses `screw_hole`, a 3 mm `drill_hole`, or stops after `create_box`.
-Five fixed cases are too few to measure a real success rate; vary the numbers.
+The M3 case was unstable until rule 5 (R10). Five fixed cases are too few to measure a real success rate: vary the numbers and the wording of the requests, and run other models (Qwen3-0.6B next).
 
 The raw output of each round is kept locally in `eval/results/rodadas-2026-11-21/` (not committed).

@@ -241,6 +241,10 @@ Two more checks live in `eval/`:
   stepped part, mirror, join, subtract, intersect, array). It removes everything it creates, so it is safe to run on a Blender
   with your own work open. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`
 
+### Run the model as a service
+
+The small model's llama-server can run under systemd too, so it comes back after a power cut: see [`deploy/llama-blender.service.example`](deploy/llama-blender.service.example). It waits for blender-minor to answer before starting (llama-server only discovers the tools when it starts) and retries every 20 seconds if that machine is still booting.
+
 ## Security
 
 - The API has **no authentication**. It listens on `127.0.0.1` by default. `BLENDER_MINOR_HOST=0.0.0.0` lets anyone who

@@ -1,0 +1,32 @@
+# Example systemd unit: a llama-server with a SMALL model that drives Blender through blender-minor.
+# Copy it, edit the paths, the User and the blender-minor address, then:
+#   sudo cp llama-blender.service.example /etc/systemd/system/llama-blender.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now llama-blender
+#
+# - mcp.json is the file from the README (the stdio bridge with --allow and --hide). Keep it next to the llama-server on a fast
+#   disk: the bridge is a small Python file that llama-server starts itself.
+# - llama-server finds the tools only when it STARTS, so the unit waits until blender-minor answers (up to 2 minutes). If that
+#   machine is still booting, the start fails and systemd tries again every 20 seconds.
+# - A second llama-server for everyday use can live on another port; this one only needs its own.
+[Unit]
+Description=llama-server for Blender: small model + blender-minor tools
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=youruser
+Group=youruser
+WorkingDirectory=/opt/llama/blender-minor
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (exec 3<>/dev/tcp/BLENDER_MINOR_HOST/9192) 2>/dev/null && exit 0; sleep 2; done; echo "blender-minor did not answer in 2 min" >&2; exit 1'
+ExecStart=/opt/llama/bin/llama-server \
+  -m /opt/llama/models/Qwen3-1.7B-Q8_0.gguf \
+  --host 0.0.0.0 --port 9931 \
+  --jinja -c 8192 -np 1 \
+  --mcp-servers-config /opt/llama/blender-minor/mcp.json
+TimeoutStartSec=240
+Restart=on-failure
+RestartSec=20
+
+[Install]
+WantedBy=multi-user.target

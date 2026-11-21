@@ -223,6 +223,10 @@ Há mais duas verificações em `eval/`:
   peça com degrau, mirror, join, subtract, intersect, array). Ele apaga tudo o que cria, então é seguro rodar num Blender com
   trabalho seu aberto. `python3 -I eval/check_tools.py --url http://127.0.0.1:9192/`
 
+### Rodar o modelo como serviço
+
+O llama-server do modelo pequeno também pode rodar no systemd, para voltar sozinho depois de uma queda de luz: veja [`deploy/llama-blender.service.example`](deploy/llama-blender.service.example). Ele espera o blender-minor responder antes de subir (o llama-server só descobre as ferramentas ao iniciar) e tenta de novo a cada 20 segundos se aquela máquina ainda estiver ligando.
+
 ## Segurança
 
 - A API **não tem autenticação**. Por padrão escuta só em `127.0.0.1`. `BLENDER_MINOR_HOST=0.0.0.0` deixa qualquer um que

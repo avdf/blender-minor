@@ -152,6 +152,11 @@ Small models still need a short instruction. See [`prompts/system.en.txt`](promp
 [`system.pt-BR.txt`](prompts/system.pt-BR.txt)). The rules that matter most: always call the tool, never claim success
 without an `OK`, always pass `color` when one is mentioned, copy object names exactly.
 
+For **parts with exact sizes and holes** (3D printing, laser) there is a shorter prompt that lists only the tools that
+job needs: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt). It matches the `--allow` list of the
+[stdio bridge](#using-it-from-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `boolean_op`, `move_object`,
+`list_objects`, `check_mesh`, `export_stl`), so the model sees the same short tool list that the prompt describes.
+
 ## When Blender changes its API: file override
 
 Blender changes the `bpy` contract between versions (in 5.3, `Specular` became `Specular IOR Level`). The embedded text

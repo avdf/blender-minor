@@ -131,6 +131,11 @@ Modelos pequenos ainda precisam de uma instrução curta: veja [`prompts/system.
 [`system.en.txt`](prompts/system.en.txt). As regras que mais importam: sempre chamar a ferramenta, nunca dizer que deu
 certo sem um `OK`, sempre passar `color` quando uma cor for citada, copiar os nomes dos objetos exatamente.
 
+Para **peças com medida exata e furos** (impressão 3D, laser) existe um prompt mais curto que lista só as ferramentas
+desse trabalho: [`prompts/system.parts.en.txt`](prompts/system.parts.en.txt) (em inglês). Ele combina com a lista
+`--allow` da [ponte stdio](#usando-com-o-llamacpp) (`create_box`, `drill_hole`, `screw_hole`, `boolean_op`, `move_object`,
+`list_objects`, `check_mesh`, `export_stl`), então o modelo enxerga a mesma lista curta que o prompt descreve.
+
 ## Quando o Blender mudar a API: override por arquivo
 
 O Blender muda o contrato do `bpy` entre versões (no 5.3, `Specular` virou `Specular IOR Level`). O texto embutido é só o

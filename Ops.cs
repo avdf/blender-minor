@@ -109,7 +109,11 @@ public static class OpScripts
     public static JsonNode ToolDef(Op op)
     {
         var props = new JsonObject();
-        foreach (var p in op.Props) props[p.Name] = new JsonObject { ["type"] = p.Type, ["description"] = p.Description };
+        // "name" goes FIRST. llama.cpp turns the schema into a grammar that keeps the property order, and a model writes the
+        // name first ("a box called base, 60 by 40..."). With name last, Qwen3-1.7B produced {"name": "base', " } and lost every
+        // size. Order carries no meaning for other clients.
+        foreach (var p in op.Props.Where(p => p.Name == "name")) props[p.Name] = new JsonObject { ["type"] = p.Type, ["description"] = p.Description };
+        foreach (var p in op.Props.Where(p => p.Name != "name")) props[p.Name] = new JsonObject { ["type"] = p.Type, ["description"] = p.Description };
         var schema = new JsonObject { ["type"] = "object", ["properties"] = props };
         if (op.Required.Length > 0) schema["required"] = new JsonArray(op.Required.Select(r => (JsonNode?)JsonValue.Create(r)).ToArray());
         return new JsonObject { ["name"] = op.Tool, ["description"] = op.Description, ["inputSchema"] = schema };

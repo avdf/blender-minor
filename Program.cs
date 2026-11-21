@@ -144,6 +144,8 @@ static class Rpc
     {
         string D(double v) => v.ToString(CultureInfo.InvariantCulture);
         var props = new JsonObject();
+        // "name" first: see Ops.ToolDef (llama.cpp keeps the schema order in its grammar, models write the name first).
+        props["name"] = new JsonObject { ["type"] = "string", ["description"] = $"default {s.Label}" };
         foreach (var p in s.Params) props[p.Name] = new JsonObject { ["type"] = "number", ["description"] = $"default {D(p.Default)}" };
         props["x"] = new JsonObject { ["type"] = "number", ["description"] = "default 0" };
         props["y"] = new JsonObject { ["type"] = "number", ["description"] = "default 0" };
@@ -151,7 +153,6 @@ static class Rpc
         props["color"] = new JsonObject { ["type"] = "string", ["description"] = "name (red, blue...) or #RRGGBB" };
         props["specular"] = new JsonObject { ["type"] = "number", ["description"] = "0 to 1" };
         props["roughness"] = new JsonObject { ["type"] = "number", ["description"] = "0 to 1" };
-        props["name"] = new JsonObject { ["type"] = "string", ["description"] = $"default {s.Label}" };
         return new JsonObject
         {
             ["name"] = s.Tool,

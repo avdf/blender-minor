@@ -125,6 +125,12 @@ própria, então a ponte tem: passe `--allow` com os nomes das ferramentas que o
          "--allow", "create_box,drill_hole,screw_hole,list_objects"]
 ```
 
+**A ordem das propriedades importa.** O `llama-server` transforma o esquema de cada ferramenta numa gramática que mantém a
+ordem dos campos, e o modelo escreve o nome primeiro ("uma caixa chamada base, 60 por 40..."). Por isso toda ferramenta
+publica o `name` como **primeira** propriedade. Com o `name` por último, o Qwen3-1.7B gerou `{"name": "base', " }` no
+`create_box` e perdeu todas as medidas (0 de 3 peças certas); com o `name` primeiro o mesmo modelo acerta dimensões e
+volumes (2 de 3, e o erro que sobrou foi de posicionamento).
+
 ### Prompt de sistema
 
 Modelos pequenos ainda precisam de uma instrução curta: veja [`prompts/system.pt-BR.txt`](prompts/system.pt-BR.txt) e

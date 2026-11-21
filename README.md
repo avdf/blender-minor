@@ -146,6 +146,11 @@ pass `--allow` with the tool names the model should see. Anything else is hidden
          "--allow", "create_box,drill_hole,screw_hole,list_objects"]
 ```
 
+**Property order matters.** `llama-server` turns each tool schema into a grammar that keeps the property order, and a
+model writes the name first ("a box called base, 60 by 40..."). Every tool therefore publishes `name` as its **first**
+property. With `name` last, Qwen3-1.7B produced `{"name": "base', " }` for `create_box` and lost every size (0 of 3 parts
+correct); with `name` first the same model gets exact dimensions and volumes (2 of 3, the miss being a placement mistake).
+
 ### System prompt
 
 Small models still need a short instruction. See [`prompts/system.en.txt`](prompts/system.en.txt) (and

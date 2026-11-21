@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <!-- The Web SDK turns Server GC on by itself: one GC heap and one GC thread per core, and memory held back. Workstation GC is right for a small local service (80 MB became 54 MB). -->
+    <ServerGarbageCollector>false</ServerGarbageCollector>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -54,6 +54,12 @@ a = ap.parse_args()
 P = a.tool_prefix
 
 
+def hex_vol(across, depth):
+    """Volume of a regular hexagon recess: (3 sqrt(3) / 2) R^2 x depth, with R = across the flats / sqrt(3)."""
+    r = across / math.sqrt(3)
+    return 1.5 * math.sqrt(3) * r * r * depth
+
+
 def box_minus(w, d, h, holes=(), cuts=0.0, adds=0.0, lengths=None):
     """Volume of the box minus round holes; lengths = how far each hole goes (default: the height, a hole along Z)."""
     lengths = lengths or [h] * len(holes)
@@ -84,6 +90,18 @@ CASES = [
     ("side hole along X (a foot)", {"create_box", "drill_hole_x"},
      "Make a box named pt_foot, 40 by 30 by 50. Drill a 6 mm hole through it, parallel to the X axis, at y=0 and z=10.",
      "pt_foot", (40, 30, 50), box_minus(40, 30, 50, [6.0], lengths=[40]), None),
+    ("nut trap (top)", {"create_box", "nut_trap"},
+     "Make a box named pt_nut, 30 by 30 by 10, with an M3 nut trap at x=0, y=0.",
+     "pt_nut", (30, 30, 10), 30 * 30 * 10 - hex_vol(5.7, 2.6), None),
+    ("screw hole + nut trap underneath", {"create_box", "screw_hole", "nut_trap_bottom"},
+     "Make a box named pt_nutplate, 40 by 40 by 8, with an M3 screw hole at x=0, y=0 and a nut trap for it on the bottom.",
+     "pt_nutplate", (40, 40, 8), 40 * 40 * 8 - hex_vol(5.7, 2.6) - math.pi * 1.7 ** 2 * (8 - 2.6), None),
+    ("pad on the right face (a foot)", {"create_box", "pad_right"},
+     "Make a box named pt_padr, 40 by 30 by 50. Raise a rectangle on its right face from y=-5 to y=5 and from z=-5 to z=5, 3 high.",
+     "pt_padr", (43, 30, 50), 40 * 30 * 50 + 10 * 10 * 3, None),
+    ("pocket on the left face (a foot)", {"create_box", "pocket_left"},
+     "Make a box named pt_pockl, 40 by 30 by 50. Cut a pocket in its left face from y=-5 to y=5 and from z=-5 to z=5, 2 deep.",
+     "pt_pockl", (40, 30, 50), 40 * 30 * 50 - 10 * 10 * 2, None),
     ("side hole along Y (an ear)", {"create_box", "drill_hole_y"},
      "Make a box named pt_ear, 50 by 20 by 30. Drill a 5 mm hole through it, parallel to the Y axis, at x=10 and z=-5.",
      "pt_ear", (50, 20, 30), box_minus(50, 20, 30, [5.0], lengths=[20]), None),

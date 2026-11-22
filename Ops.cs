@@ -28,6 +28,20 @@ public static class OpScripts
         => int.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v)
             ? Math.Clamp(v, lo, hi) : fallback;
 
+    /// <summary>Printer compensation, in mm, a property of the MACHINE and not of the request, so it is a server setting (environment) and
+    /// not an argument the model has to choose. FDM plastic squeezes inward, so a hole prints smaller than it was drawn: the tool cuts
+    /// the requested diameter PLUS this value (ask for 3, with 0.2 it cuts 3.2). Read on every call. Default 0, so the results are
+    /// exact until the owner of the printer sets it. BLENDER_MINOR_HOLE_COMP applies to every round hole (drill_hole*, screw_hole, with its
+    /// counterbore or countersink) and BLENDER_MINOR_NUT_COMP to the nut traps (across the flats), kept apart because a hexagon closes
+    /// differently from a circle and a nut trap is the tightest fit of the part (too small: the nut does not go in; too big: it spins).
+    /// Allowed range 0 to 2.</summary>
+    public static double HoleComp => EnvDouble("BLENDER_MINOR_HOLE_COMP");
+    public static double NutComp => EnvDouble("BLENDER_MINOR_NUT_COMP");
+
+    private static double EnvDouble(string name)
+        => double.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)
+            ? Math.Clamp(v, 0, 2) : 0;
+
     private static readonly OpProp NameProp = new("name", "string", "exact object name, as listed by list_objects");
     private static readonly OpProp X = new("x", "number", "X position");
     private static readonly OpProp Y = new("y", "number", "Y position");
@@ -144,9 +158,9 @@ public static class OpScripts
             [NameProp, new("diameter", "number", "hole diameter"), X, Z],
             ["name", "diameter", "x", "z"]),
         new("screw_hole",
-            "Drill a hole for a standard screw size by name, using a table of typical dimensions. kind: clearance (screw passes through), counterbore (plus a recess for a socket head), countersunk (plus a cone for a flat head) or insert (blind hole for a heat-set insert; needs the entry point z along the axis).",
+            "Drill a hole for a standard screw size by name, using a table of typical dimensions. kind: clearance (screw passes through), counterbore (plus a recess for a socket head), countersunk (plus a cone for a flat head) insert (blind hole for a heat-set insert; needs the entry point z along the axis) or pilot (the smaller hole the screw cuts its own thread in, as in printed plastic).",
             new OpProp[] { NameProp, new("size", "string", "M2, M2.5, M3, M4, M5, M6 or M8 (default M3)"),
-                           new("kind", "string", "clearance (default), counterbore, countersunk or insert") }
+                           new("kind", "string", "clearance (default), counterbore, countersunk, insert or pilot") }
                 .Concat(HolePlacement)
                 .Concat([new OpProp("depth", "number", "optional: makes a clearance hole blind")]).ToArray(),
             ["name"]),
@@ -277,7 +291,7 @@ public static class OpScripts
         var (clr, ec) = ShapeScripts.Number(args, "clearance", 0.2, 0, 2); if (ec is not null) return (null, ec);
         var (x, ex) = ShapeScripts.Number(args, "x", 0, -CoordLimit, CoordLimit); if (ex is not null) return (null, ex);
         var (y, ey) = ShapeScripts.Number(args, "y", 0, -CoordLimit, CoordLimit); if (ey is not null) return (null, ey);
-        double across = flats + clr, radius = across / Math.Sqrt(3), depth = thick + clr;   // radius: corner of the hexagon
+        double across = flats + clr + NutComp, radius = across / Math.Sqrt(3), depth = thick + clr;   // radius: corner of the hexagon; NutComp: printer compensation
 
         string face = top ? "top" : "bottom";
         var sb = new StringBuilder(PyHelpers).Append('\n');
@@ -323,7 +337,7 @@ public static class OpScripts
         sb.Append("                    print(\"ERROR: nothing was cut: the nut trap does not overlap the part\")\n");
         sb.Append("                else:\n");
         sb.Append("                    note = (\" (warning: the nut trap only partly overlaps the part: it removed %.1f of the %.1f mm3 a whole trap removes; check x and y)\" % (vol0 - vol, full)) if (vol0 - vol) < 0.5 * full else \"\"\n");
-        sb.Append($"                    print(\"OK \" + o.name + \" nut trap {size} ({N(across)} across the flats, {N(depth)} deep) at (\" + str(round(x, 4)) + \", \" + str(round(y, 4)) + \") in the {face} face, which is at z=\" + str(round(plane, 4)) + \" vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)) + note)");
+        sb.Append($"                    print(\"OK \" + o.name + \" nut trap {size} ({N(Math.Round(across, 4))} across the flats, {N(Math.Round(depth, 4))} deep) at (\" + str(round(x, 4)) + \", \" + str(round(y, 4)) + \") in the {face} face, which is at z=\" + str(round(plane, 4)) + \" vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)) + note)");
         return (sb.ToString(), null);
     }
 
@@ -913,6 +927,7 @@ public static class OpScripts
         if (!ShapeScripts.Has(args, "diameter")) return (null, "Argument 'diameter' is required.");
         var (dia, ed) = ShapeScripts.Number(args, "diameter", 0, 0.01, 10000); if (ed is not null) return (null, ed);
         var (clr, ecl) = ShapeScripts.Number(args, "clearance", 0, 0, 10); if (ecl is not null) return (null, ecl);
+        clr += HoleComp;   // printer compensation (server setting): goes into the hole, the counterbore and the countersink alike
         var (segf, esg) = ShapeScripts.Number(args, "segments", DefaultSegments, 8, MaxSegments); if (esg is not null) return (null, esg);
         int seg = (int)Math.Round(segf);
         string axis = (ShapeScripts.Text(args, "axis") ?? "Z").ToUpperInvariant();
@@ -1023,7 +1038,7 @@ public static class OpScripts
                 double cbR = (cbD + clr) / 2;
                 sb.Append($"        c2[ai] = e + d * ({N(m2)} - {N(cbH)}) / 2\n");
                 sb.Append($"        bpy.ops.mesh.primitive_cylinder_add(vertices={seg}, radius={N(cbR)}, depth={N(cbH + m2)}, location=tuple(c2), rotation={rot})\n");
-                recess = $" counterbore {N(cbD + clr)}x{N(cbH)}";
+                recess = $" counterbore {N(Math.Round(cbD + clr, 4))}x{N(cbH)}";
             }
             else
             {
@@ -1031,7 +1046,7 @@ public static class OpScripts
                 double h = csR - holeR;   // 90 degree cone: the radius grows 1:1 with the depth
                 sb.Append($"        c2[ai] = e + d * ({N(m2)} - {N(h)}) / 2\n");
                 sb.Append($"        bpy.ops.mesh.primitive_cone_add(vertices={seg}, radius1={N(holeR)}, radius2={N(csR + m2)}, depth={N(h + m2)}, location=tuple(c2), rotation={coneRot})\n");
-                recess = $" countersink {N(csD + clr)}";
+                recess = $" countersink {N(Math.Round(csD + clr, 4))}";
             }
             sb.Append("        cutter2 = bpy.context.active_object\n");
             sb.Append("        cutter2.name = 'BM_recess_cutter'\n");
@@ -1058,7 +1073,7 @@ public static class OpScripts
         }
         else
             sb.Append("            note = \"\"\n");
-        sb.Append($"            print(\"OK \" + t.name + \" hole diameter {N(dia + clr)} at {where} axis {axis} {kind}{recess}{tag} vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)) + nudge + note)");
+        sb.Append($"            print(\"OK \" + t.name + \" hole diameter {N(Math.Round(dia + clr, 4))} at {where} axis {axis} {kind}{recess}{tag} vertices=\" + str(n) + \" volume=\" + str(round(vol, 4)) + nudge + note)");
         return (sb.ToString(), null);
     }
 
@@ -1092,6 +1107,10 @@ public static class OpScripts
                 if (Get("countersink_diameter", out csD) is { } e5) return (null, e5);
                 o["diameter"] = clearance; o["countersink_diameter"] = csD;
                 break;
+            case "pilot":   // the hole a screw cuts its own thread in (printed plastic): the standard tap drill, blind with "depth" or through
+                if (Get("pilot_diameter", out double pilot) is { } e8) return (null, e8);
+                o["diameter"] = pilot;
+                break;
             case "insert":
                 if (Get("insert_diameter", out insD) is { } e6) return (null, e6);
                 if (Get("insert_depth", out insH) is { } e7) return (null, e7);
@@ -1099,7 +1118,7 @@ public static class OpScripts
                 if (!o.ContainsKey("depth")) o["depth"] = insH;
                 break;
             default:
-                return (null, $"Invalid kind '{kind}'. Use clearance, counterbore, countersunk or insert.");
+                return (null, $"Invalid kind '{kind}'. Use clearance, counterbore, countersunk, insert or pilot.");
         }
         using var doc = JsonDocument.Parse(o.ToJsonString());
         return BuildDrill(lit, doc.RootElement, $"{size} {kind}");

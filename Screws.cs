@@ -12,19 +12,20 @@ namespace BlenderMinor;
 public static class Screws
 {
     public static readonly string[] Fields =
-        ["clearance", "counterbore_diameter", "counterbore_depth", "countersink_diameter", "insert_diameter", "insert_depth", "nut_flats", "nut_thickness"];
+        ["clearance", "counterbore_diameter", "counterbore_depth", "countersink_diameter", "insert_diameter", "insert_depth", "nut_flats", "nut_thickness", "pilot_diameter"];
 
     // size: clearance, counterbore diameter, counterbore depth, countersink diameter, insert hole diameter, insert hole depth,
-    //       nut width across the flats and nut thickness (ISO 4032, regular hex nut)
+    //       nut width across the flats and nut thickness (ISO 4032, regular hex nut), pilot hole diameter (standard tap drill: the
+    //       hole a screw cuts its own thread in; a starting point for printed plastic, tune it in screws.json)
     private static readonly Dictionary<string, double[]> Defaults = new()
     {
-        ["M2"] = [2.4, 4.4, 2.0, 4.4, 3.2, 4.0, 4.0, 1.6],
-        ["M2.5"] = [2.9, 5.0, 2.5, 5.5, 3.6, 5.0, 5.0, 2.0],
-        ["M3"] = [3.4, 6.0, 3.0, 6.7, 4.0, 5.7, 5.5, 2.4],
-        ["M4"] = [4.5, 8.0, 4.0, 9.0, 5.4, 8.1, 7.0, 3.2],
-        ["M5"] = [5.5, 10.0, 5.0, 11.2, 6.4, 9.5, 8.0, 4.0],
-        ["M6"] = [6.6, 11.0, 6.0, 13.4, 8.0, 12.0, 10.0, 5.0],
-        ["M8"] = [9.0, 15.0, 8.0, 17.9, 9.6, 12.7, 13.0, 6.5],
+        ["M2"] = [2.4, 4.4, 2.0, 4.4, 3.2, 4.0, 4.0, 1.6, 1.6],
+        ["M2.5"] = [2.9, 5.0, 2.5, 5.5, 3.6, 5.0, 5.0, 2.0, 2.05],
+        ["M3"] = [3.4, 6.0, 3.0, 6.7, 4.0, 5.7, 5.5, 2.4, 2.5],
+        ["M4"] = [4.5, 8.0, 4.0, 9.0, 5.4, 8.1, 7.0, 3.2, 3.3],
+        ["M5"] = [5.5, 10.0, 5.0, 11.2, 6.4, 9.5, 8.0, 4.0, 4.2],
+        ["M6"] = [6.6, 11.0, 6.0, 13.4, 8.0, 12.0, 10.0, 5.0, 5.0],
+        ["M8"] = [9.0, 15.0, 8.0, 17.9, 9.6, 12.7, 13.0, 6.5, 6.8],
     };
 
     public static string FilePath =>
